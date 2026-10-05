@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
 use gpui::{
@@ -11,6 +12,7 @@ use gpui_kit::component::{
     h_flex, v_flex,
 };
 use kestrel_core::Request;
+use kestrel_http::HttpClient;
 use kestrel_storage::load_collection_file;
 use kestrel_ui::views::{
     EditorEvent, EnvironmentEvent, EnvironmentModal, RequestEditor, ResponsePanel, Sidebar,
@@ -23,6 +25,7 @@ struct KestrelWorkspace {
     editor: Entity<RequestEditor>,
     response: Entity<ResponsePanel>,
     env_modal: Entity<EnvironmentModal>,
+    http_client: Arc<HttpClient>,
     open_requests: Vec<Request>,
     active_environment_name: String,
     _subscriptions: Vec<Subscription>,
@@ -84,7 +87,7 @@ impl KestrelWorkspace {
                     });
                 }
                 EditorEvent::SendRequest => {
-                    // Send request execution wiring
+                    this.execute_current_request(cx);
                 }
                 _ => {}
             },
@@ -136,12 +139,15 @@ impl KestrelWorkspace {
             em.set_environments(initial_envs, first_env_id, cx);
         });
 
+        let http_client = Arc::new(HttpClient::new());
+
         let mut workspace = Self {
             sidebar,
             tab_bar,
             editor,
             response,
             env_modal,
+            http_client,
             open_requests: Vec::new(),
             active_environment_name: first_env_name,
             _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env],
@@ -271,6 +277,45 @@ impl KestrelWorkspace {
             tb.set_tabs(tabs, active_ix, cx);
         });
         cx.notify();
+    }
+
+    fn execute_current_request(&mut self, cx: &mut Context<Self>) {
+        let maybe_req = self.editor.read(cx).build_current_request(cx);
+        let Some(req) = maybe_req else {
+            return;
+        };
+
+        let active_env = self.env_modal.read(cx).active_environment().cloned();
+        let client = Arc::clone(&self.http_client);
+        let response_entity = self.response.clone();
+
+        // Mark loading state in response panel
+        response_entity.update(cx, |resp_panel, cx| {
+            resp_panel.set_loading(true, cx);
+        });
+
+        cx.spawn(async move |this, cx| {
+            let env_ref = active_env.as_ref();
+            let envs = if let Some(e) = env_ref {
+                vec![e]
+            } else {
+                Vec::new()
+            };
+
+            let result = client.execute(&req, &envs).await;
+
+            let _ = this.update(cx, |this, cx| {
+                this.response.update(cx, |resp_panel, cx| match result {
+                    Ok(resp) => {
+                        resp_panel.set_response(resp, cx);
+                    }
+                    Err(err) => {
+                        resp_panel.set_error(err.to_string(), cx);
+                    }
+                });
+            });
+        })
+        .detach();
     }
 }
 
@@ -412,6 +457,12 @@ impl Render for KestrelWorkspace {
 }
 
 fn main() -> Result<()> {
+    // reqwest and hyper require an active Tokio reactor running on threads executing network I/O
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let _guard = rt.enter();
+
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
         .run(|cx| {

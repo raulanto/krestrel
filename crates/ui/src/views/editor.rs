@@ -269,6 +269,77 @@ impl RequestEditor {
         self.request.as_ref()
     }
 
+    /// Builds a fresh `Request` reflecting all current values in the URL input,
+    /// body input, headers, query parameters, and auth inputs.
+    pub fn build_current_request(&self, cx: &App) -> Option<Request> {
+        let mut req = self.request.clone()?;
+        req.url = self.url_input.read(cx).value().to_string();
+
+        let body_val = self.body_input.read(cx).value().to_string();
+        req.body = match self.selected_body_format {
+            BodyFormat::None => Body::None,
+            BodyFormat::Json => Body::Json { content: body_val },
+            BodyFormat::Text => Body::Raw {
+                content: body_val,
+                content_type: "text/plain".to_string(),
+            },
+            BodyFormat::Xml => Body::Raw {
+                content: body_val,
+                content_type: "application/xml".to_string(),
+            },
+            BodyFormat::FormUrlEncoded => match &req.body {
+                Body::UrlEncoded { entries } => Body::UrlEncoded {
+                    entries: entries.clone(),
+                },
+                _ => Body::UrlEncoded {
+                    entries: Vec::new(),
+                },
+            },
+            BodyFormat::Multipart => match &req.body {
+                Body::FormData { entries } => Body::FormData {
+                    entries: entries.clone(),
+                },
+                _ => Body::FormData {
+                    entries: Vec::new(),
+                },
+            },
+            BodyFormat::Binary => Body::Binary {
+                file_path: body_val,
+            },
+            BodyFormat::GraphQL => {
+                let vars_str = self.graphql_vars_input.read(cx).value().to_string();
+                let vars = if vars_str.trim().is_empty() {
+                    None
+                } else {
+                    Some(vars_str)
+                };
+                Body::GraphQL {
+                    query: body_val,
+                    variables: vars,
+                }
+            }
+        };
+
+        // Sync auth fields from inputs
+        req.auth = match &req.auth {
+            Auth::None => Auth::None,
+            Auth::Bearer { .. } => Auth::Bearer {
+                token: self.auth_token_input.read(cx).value().to_string(),
+            },
+            Auth::Basic { .. } => Auth::Basic {
+                username: self.auth_user_input.read(cx).value().to_string(),
+                password: self.auth_pass_input.read(cx).value().to_string(),
+            },
+            Auth::ApiKey { location, .. } => Auth::ApiKey {
+                key: self.auth_key_name_input.read(cx).value().to_string(),
+                value: self.auth_key_val_input.read(cx).value().to_string(),
+                location: *location,
+            },
+        };
+
+        Some(req)
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.is_dirty
     }

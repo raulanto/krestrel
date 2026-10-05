@@ -1,5 +1,6 @@
 use gpui::{
-    Context, FontWeight, IntoElement, ParentElement as _, Render, Styled, Window, div, rgb,
+    Context, FontWeight, IntoElement, ParentElement as _, Render, Styled, Window, div,
+    prelude::FluentBuilder as _, rgb,
 };
 use gpui_kit::component::{
     ActiveTheme as _,
@@ -21,6 +22,8 @@ pub enum ResponseTab {
 pub struct ResponsePanel {
     response: Option<HttpResponse>,
     active_tab: ResponseTab,
+    is_loading: bool,
+    error: Option<String>,
 }
 
 impl ResponsePanel {
@@ -28,11 +31,29 @@ impl ResponsePanel {
         Self {
             response: None,
             active_tab: ResponseTab::Pretty,
+            is_loading: false,
+            error: None,
         }
+    }
+
+    pub fn set_loading(&mut self, is_loading: bool, cx: &mut Context<Self>) {
+        self.is_loading = is_loading;
+        if is_loading {
+            self.error = None;
+        }
+        cx.notify();
     }
 
     pub fn set_response(&mut self, resp: HttpResponse, cx: &mut Context<Self>) {
         self.response = Some(resp);
+        self.is_loading = false;
+        self.error = None;
+        cx.notify();
+    }
+
+    pub fn set_error(&mut self, err: String, cx: &mut Context<Self>) {
+        self.error = Some(err);
+        self.is_loading = false;
         cx.notify();
     }
 }
@@ -48,54 +69,73 @@ impl Render for ResponsePanel {
         let theme = cx.theme();
         let active_tab = self.active_tab;
 
-        let (status_str, time_str, size_str, is_success, body_preview) = match &self.response {
-            Some(resp) => {
-                let status_text = format!("{} {}", resp.status, resp.status_text);
-                let duration_text = format!("{:.2} ms", resp.duration.as_secs_f64() * 1000.0);
-                let size_text = if resp.size_bytes < 1024 {
-                    format!("{} B", resp.size_bytes)
-                } else {
-                    format!("{:.1} KB", resp.size_bytes as f64 / 1024.0)
-                };
-
-                let is_ok = (200..300).contains(&resp.status);
-
-                let body_str = match active_tab {
-                    ResponseTab::Pretty => {
-                        if let Ok(json_val) =
-                            serde_json::from_slice::<serde_json::Value>(&resp.body)
-                        {
-                            serde_json::to_string_pretty(&json_val)
-                                .unwrap_or_else(|_| String::from_utf8_lossy(&resp.body).to_string())
-                        } else {
-                            String::from_utf8_lossy(&resp.body).to_string()
-                        }
-                    }
-                    ResponseTab::Raw => String::from_utf8_lossy(&resp.body).to_string(),
-                    ResponseTab::Headers => resp
-                        .headers
-                        .iter()
-                        .map(|(k, v)| format!("{}: {}", k, v))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    ResponseTab::Inspect => format!(
-                        "Estado: {}\nTiempo: {}\nTamaño: {}\nHeaders: {}",
-                        status_text,
-                        duration_text,
-                        size_text,
-                        resp.headers.len()
-                    ),
-                };
-
-                (status_text, duration_text, size_text, is_ok, body_str)
-            }
-            None => (
-                "Sin respuesta".to_string(),
-                "-".to_string(),
+        let (status_str, time_str, size_str, is_success, body_preview) = if self.is_loading {
+            (
+                "Enviando...".to_string(),
+                "...".to_string(),
                 "-".to_string(),
                 true,
-                "Envía una solicitud para ver la respuesta aquí...".to_string(),
-            ),
+                "Ejecutando solicitud en segundo plano...".to_string(),
+            )
+        } else if let Some(err) = &self.error {
+            (
+                "Error".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                false,
+                format!("Error al ejecutar la solicitud:\n\n{}", err),
+            )
+        } else {
+            match &self.response {
+                Some(resp) => {
+                    let status_text = format!("{} {}", resp.status, resp.status_text);
+                    let duration_text = format!("{:.2} ms", resp.duration.as_secs_f64() * 1000.0);
+                    let size_text = if resp.size_bytes < 1024 {
+                        format!("{} B", resp.size_bytes)
+                    } else {
+                        format!("{:.1} KB", resp.size_bytes as f64 / 1024.0)
+                    };
+
+                    let is_ok = resp.status >= 200 && resp.status < 400;
+
+                    let body_str = match active_tab {
+                        ResponseTab::Pretty => {
+                            if let Ok(json_val) =
+                                serde_json::from_slice::<serde_json::Value>(&resp.body)
+                            {
+                                serde_json::to_string_pretty(&json_val).unwrap_or_else(|_| {
+                                    String::from_utf8_lossy(&resp.body).to_string()
+                                })
+                            } else {
+                                String::from_utf8_lossy(&resp.body).to_string()
+                            }
+                        }
+                        ResponseTab::Raw => String::from_utf8_lossy(&resp.body).to_string(),
+                        ResponseTab::Headers => resp
+                            .headers
+                            .iter()
+                            .map(|(k, v)| format!("{}: {}", k, v))
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        ResponseTab::Inspect => format!(
+                            "Estado: {}\nTiempo: {}\nTamaño: {}\nHeaders: {}",
+                            status_text,
+                            duration_text,
+                            size_text,
+                            resp.headers.len()
+                        ),
+                    };
+
+                    (status_text, duration_text, size_text, is_ok, body_str)
+                }
+                None => (
+                    "Sin respuesta".to_string(),
+                    "-".to_string(),
+                    "-".to_string(),
+                    true,
+                    "Envía una solicitud para ver la respuesta aquí...".to_string(),
+                ),
+            }
         };
 
         v_flex()
@@ -109,10 +149,24 @@ impl Render for ResponsePanel {
                     .justify_between()
                     .w_full()
                     .child(
-                        div()
-                            .font_weight(FontWeight::BOLD)
-                            .text_sm()
-                            .child("Respuesta"),
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_sm()
+                                    .child("Respuesta"),
+                            )
+                            .when(self.is_loading, |this| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(0xe06c1b))
+                                        .child("• Procesando..."),
+                                )
+                            }),
                     )
                     .child(
                         h_flex()
