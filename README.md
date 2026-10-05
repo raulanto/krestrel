@@ -83,7 +83,7 @@ kestrel/
 
 ## Hoja de ruta
 
-- [ ] Abrir y guardar colecciones OpenCollection YAML
+- [x] Abrir y guardar colecciones OpenCollection YAML
 - [ ] Sidebar con carpetas y búsqueda
 - [ ] Pestañas de solicitud y editor de body
 - [ ] Entornos y variables
