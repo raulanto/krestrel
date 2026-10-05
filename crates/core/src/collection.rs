@@ -36,3 +36,27 @@ pub struct Folder {
     #[serde(default, flatten)]
     pub extra: IndexMap<String, serde_json::Value>,
 }
+
+impl Collection {
+    pub fn find_request(&self, id: &str) -> Option<&Request> {
+        find_request_in_items(&self.items, id)
+    }
+}
+
+fn find_request_in_items<'a>(items: &'a [CollectionItem], id: &str) -> Option<&'a Request> {
+    for item in items {
+        match item {
+            CollectionItem::Request(req) => {
+                if req.id == id {
+                    return Some(req);
+                }
+            }
+            CollectionItem::Folder(folder) => {
+                if let Some(req) = find_request_in_items(&folder.items, id) {
+                    return Some(req);
+                }
+            }
+        }
+    }
+    None
+}

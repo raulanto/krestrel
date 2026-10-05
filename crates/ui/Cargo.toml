@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 kestrel-core.workspace = true
+kestrel-http.workspace = true
 kestrel-json-graph.workspace = true
 gpui.workspace = true
 gpui-kit.workspace = true

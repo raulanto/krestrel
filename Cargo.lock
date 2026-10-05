@@ -3600,6 +3600,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "kestrel-core",
+ "kestrel-http",
  "kestrel-json-graph",
  "serde",
  "serde_json",
