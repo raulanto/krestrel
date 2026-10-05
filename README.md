@@ -85,7 +85,7 @@ kestrel/
 
 - [x] Abrir y guardar colecciones OpenCollection YAML
 - [x] Sidebar con carpetas y búsqueda
-- [ ] Pestañas de solicitud y editor de body
+- [x] Pestañas de solicitud y editor de body
 - [ ] Entornos y variables
 - [ ] Cliente HTTP y GraphQL
 - [ ] Panel de respuesta (Pretty / Raw / Headers)

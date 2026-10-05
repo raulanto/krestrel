@@ -61,12 +61,28 @@ impl KestrelWorkspace {
         let sub_editor = cx.subscribe_in(
             &editor,
             window,
-            |_this, _, ev: &EditorEvent, _window, _cx| match ev {
-                EditorEvent::SendRequest => {
-                    // Send request execution wiring
+            |this, _, ev: &EditorEvent, _window, cx| match ev {
+                EditorEvent::RequestModified => {
+                    let active_ix = this.tab_bar.read(cx).active_index();
+                    this.tab_bar.update(cx, |tb, cx| {
+                        tb.set_dirty(active_ix, true, cx);
+                    });
+                }
+                EditorEvent::MethodChanged(method) => {
+                    let active_ix = this.tab_bar.read(cx).active_index();
+                    if let Some(req) = this.open_requests.get_mut(active_ix) {
+                        req.method = *method;
+                    }
+                    this.sync_tabs(active_ix, cx);
                 }
                 EditorEvent::SaveRequest => {
-                    // Save request wiring
+                    let active_ix = this.tab_bar.read(cx).active_index();
+                    this.tab_bar.update(cx, |tb, cx| {
+                        tb.set_dirty(active_ix, false, cx);
+                    });
+                }
+                EditorEvent::SendRequest => {
+                    // Send request execution wiring
                 }
                 _ => {}
             },
@@ -80,7 +96,7 @@ impl KestrelWorkspace {
             });
         }
 
-        Self {
+        let mut workspace = Self {
             sidebar,
             tab_bar,
             editor,
@@ -88,7 +104,31 @@ impl KestrelWorkspace {
             open_requests: Vec::new(),
             active_environment: "Development".to_string(),
             _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor],
+        };
+
+        // Open first request from collection if available
+        let first_req = workspace.sidebar.read(cx).collection().and_then(|col| {
+            fn find_first(items: &[kestrel_core::CollectionItem]) -> Option<String> {
+                for item in items {
+                    match item {
+                        kestrel_core::CollectionItem::Request(r) => return Some(r.id.clone()),
+                        kestrel_core::CollectionItem::Folder(f) => {
+                            if let Some(id) = find_first(&f.items) {
+                                return Some(id);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            find_first(&col.items)
+        });
+
+        if let Some(req_id) = first_req {
+            workspace.open_or_select_request(&req_id, window, cx);
         }
+
+        workspace
     }
 
     fn open_or_select_request(
@@ -152,12 +192,20 @@ impl KestrelWorkspace {
     }
 
     fn sync_tabs(&mut self, active_ix: usize, cx: &mut Context<Self>) {
+        let is_editor_dirty = self.editor.read(cx).is_dirty();
         let tabs = self
             .open_requests
             .iter()
-            .map(|r| TabItem {
+            .enumerate()
+            .map(|(ix, r)| TabItem {
                 id: r.id.clone(),
                 title: r.name.clone(),
+                method: r.method,
+                is_dirty: if ix == active_ix {
+                    is_editor_dirty
+                } else {
+                    false
+                },
             })
             .collect();
 

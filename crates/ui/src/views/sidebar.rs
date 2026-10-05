@@ -2,17 +2,17 @@ use std::collections::HashSet;
 
 use gpui::{
     AppContext, Context, Entity, FontWeight, IntoElement, ParentElement as _, Render, SharedString,
-    Styled, Subscription, Window, div, px, rgb,
+    Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
 };
 use gpui_kit::component::{
-    Icon, IconName, h_flex,
+    ActiveTheme as _, Icon, IconName,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputEvent, InputState},
-    sidebar::{
-        Sidebar as KitSidebar, SidebarCollapsible, SidebarHeader, SidebarMenu, SidebarMenuItem,
-    },
+    scroll::ScrollableElement as _,
     v_flex,
 };
-use kestrel_core::{Collection, CollectionItem, Folder, HttpMethod, Request};
+use kestrel_core::{Collection, CollectionItem, Folder, HttpMethod};
 
 use super::search::filter_collection_items;
 
@@ -77,67 +77,13 @@ impl Sidebar {
         }
         cx.notify();
     }
-
-    fn render_request_item(
-        &self,
-        req: &Request,
-        is_selected: bool,
-        cx: &mut Context<Self>,
-    ) -> SidebarMenuItem {
-        let req_id = req.id.clone();
-        let method = req.method;
-
-        SidebarMenuItem::new(req.name.clone())
-            .active(is_selected)
-            .suffix(move |_, _| method_badge(method))
-            .on_click(cx.listener(move |this, _, _window, cx| {
-                this.selected_request_id = Some(req_id.clone());
-                cx.emit(SidebarEvent::SelectRequest(req_id.clone()));
-                cx.notify();
-            }))
-    }
-
-    fn render_folder_item(&self, folder: &Folder, cx: &mut Context<Self>) -> SidebarMenuItem {
-        let is_collapsed = self.collapsed_folders.contains(&folder.id);
-        let folder_id = folder.id.clone();
-
-        let icon_name = if is_collapsed {
-            IconName::Folder
-        } else {
-            IconName::FolderOpen
-        };
-
-        let mut item = SidebarMenuItem::new(folder.name.clone())
-            .icon(Icon::new(icon_name))
-            .click_to_toggle(true)
-            .on_click(cx.listener(move |this, _, _window, cx| {
-                this.toggle_folder(&folder_id, cx);
-            }));
-
-        if !is_collapsed {
-            let mut children = Vec::new();
-            for sub_item in &folder.items {
-                match sub_item {
-                    CollectionItem::Folder(sub_folder) => {
-                        children.push(self.render_folder_item(sub_folder, cx));
-                    }
-                    CollectionItem::Request(sub_req) => {
-                        let is_selected = self.selected_request_id.as_deref() == Some(&sub_req.id);
-                        children.push(self.render_request_item(sub_req, is_selected, cx));
-                    }
-                }
-            }
-            item = item.children(children);
-        }
-
-        item
-    }
 }
 
 impl gpui::EventEmitter<SidebarEvent> for Sidebar {}
 
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
         let query = self.search_query.clone();
 
         let collection_name = self
@@ -146,82 +92,251 @@ impl Render for Sidebar {
             .map(|c| c.name.clone())
             .unwrap_or_else(|| "Sin colección".to_string());
 
-        let mut menu = SidebarMenu::new();
+        v_flex()
+            .w(px(280.))
+            .h_full()
+            .border_r_1()
+            .border_color(theme.border)
+            .bg(theme.background)
+            // 1. Sidebar Header: Collection title & Quick Search input
+            .child(
+                v_flex()
+                    .p_3()
+                    .gap_2p5()
+                    .border_b_1()
+                    .border_color(theme.border)
+                    .bg(theme.muted.opacity(0.12))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .w_full()
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Icon::new(IconName::FolderOpen)
+                                            .text_color(rgb(0xe06c1b)),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_sm()
+                                            .text_color(theme.foreground)
+                                            .text_ellipsis()
+                                            .child(collection_name),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        Input::new(&self.search_input)
+                            .prefix(Icon::new(IconName::Search))
+                            .cleanable(true),
+                    ),
+            )
+            // 2. Sidebar Tree Content Canvas
+            .child(
+                div()
+                    .flex_1()
+                    .p_2()
+                    .overflow_y_scrollbar()
+                    .child(self.render_tree_content(&query, cx)),
+            )
+    }
+}
 
-        if let Some(col) = &self.collection {
-            if query.is_empty() {
-                // Render tree hierarchy
-                for item in &col.items {
-                    match item {
-                        CollectionItem::Folder(folder) => {
-                            menu = menu.child(self.render_folder_item(folder, cx));
-                        }
-                        CollectionItem::Request(req) => {
-                            let is_selected = self.selected_request_id.as_deref() == Some(&req.id);
-                            menu = menu.child(self.render_request_item(req, is_selected, cx));
-                        }
-                    }
-                }
+impl Sidebar {
+    fn render_tree_content(&self, query: &str, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(col) = &self.collection else {
+            return v_flex()
+                .p_4()
+                .items_center()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child("No hay colección cargada")
+                .into_any_element();
+        };
+
+        if query.is_empty() {
+            // Render hierarchical folder/request tree
+            v_flex()
+                .gap_1()
+                .w_full()
+                .children(col.items.iter().map(|item| {
+                    self.render_collection_item(item, 0, cx).into_any_element()
+                }))
+                .into_any_element()
+        } else {
+            // Render filtered search results
+            let filtered = filter_collection_items(&col.items, query, &[]);
+            if filtered.is_empty() {
+                v_flex()
+                    .p_4()
+                    .items_center()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!("No hay resultados para \"{}\"", query))
+                    .into_any_element()
             } else {
-                // Render filtered list matching search query
-                let filtered = filter_collection_items(&col.items, &query, &[]);
-                for f_item in filtered {
-                    match f_item.kind {
-                        super::search::FilteredItemKind::Folder => {
-                            menu = menu.child(
-                                SidebarMenuItem::new(f_item.name)
-                                    .icon(Icon::new(IconName::Folder))
-                                    .disable(true),
-                            );
+                v_flex()
+                    .gap_1()
+                    .w_full()
+                    .children(filtered.into_iter().map(|f_item| {
+                        match f_item.kind {
+                            super::search::FilteredItemKind::Folder => {
+                                h_flex()
+                                    .px_2()
+                                    .py_1p5()
+                                    .gap_2()
+                                    .items_center()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(Icon::new(IconName::Folder))
+                                    .child(f_item.name)
+                                    .into_any_element()
+                            }
+                            super::search::FilteredItemKind::Request(method) => {
+                                let req_id = f_item.id.clone();
+                                let is_selected = self.selected_request_id.as_deref() == Some(&f_item.id);
+
+                                self.render_request_row(&f_item.name, &req_id, method, is_selected, 0, cx)
+                                    .into_any_element()
+                            }
                         }
-                        super::search::FilteredItemKind::Request(method) => {
-                            let req_id = f_item.id.clone();
-                            let is_selected =
-                                self.selected_request_id.as_deref() == Some(&f_item.id);
-                            menu = menu.child(
-                                SidebarMenuItem::new(f_item.name)
-                                    .active(is_selected)
-                                    .suffix(move |_, _| method_badge(method))
-                                    .on_click(cx.listener(move |this, _, _window, cx| {
-                                        this.selected_request_id = Some(req_id.clone());
-                                        cx.emit(SidebarEvent::SelectRequest(req_id.clone()));
-                                        cx.notify();
-                                    })),
-                            );
-                        }
-                    }
-                }
+                    }))
+                    .into_any_element()
             }
         }
+    }
 
-        KitSidebar::new("app-sidebar")
-            .collapsible(SidebarCollapsible::None)
-            .w(px(280.))
-            .header(
-                SidebarHeader::new().child(
-                    v_flex()
-                        .gap_2()
-                        .w_full()
-                        .child(
-                            h_flex()
-                                .items_center()
-                                .gap_2()
-                                .child(Icon::new(IconName::FolderOpen))
-                                .child(
-                                    div()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_ellipsis()
-                                        .child(collection_name),
-                                ),
-                        )
-                        .child(
-                            Input::new(&self.search_input)
-                                .prefix(Icon::new(IconName::Search))
-                                .cleanable(true),
-                        ),
-                ),
+    fn render_collection_item(&self, item: &CollectionItem, depth: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        match item {
+            CollectionItem::Folder(folder) => self.render_folder_row(folder, depth, cx).into_any_element(),
+            CollectionItem::Request(req) => {
+                let is_selected = self.selected_request_id.as_deref() == Some(&req.id);
+                self.render_request_row(&req.name, &req.id, req.method, is_selected, depth, cx).into_any_element()
+            }
+        }
+    }
+
+    fn render_folder_row(&self, folder: &Folder, depth: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let is_collapsed = self.collapsed_folders.contains(&folder.id);
+        let folder_id = folder.id.clone();
+        let indent = (depth as f32) * 12.0;
+
+        let icon_name = if is_collapsed {
+            IconName::Folder
+        } else {
+            IconName::FolderOpen
+        };
+
+        let chevron_name = if is_collapsed {
+            IconName::ChevronRight
+        } else {
+            IconName::ChevronDown
+        };
+
+        v_flex()
+            .w_full()
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .px_2()
+                    .py_1p5()
+                    .rounded_md()
+                    .pl(px(indent + 8.))
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new(format!("caret-{}", folder_id))
+                                    .ghost()
+                                    .icon(Icon::new(chevron_name))
+                                    .on_click(cx.listener({
+                                        let f_id = folder_id.clone();
+                                        move |this, _, _, cx| {
+                                            this.toggle_folder(&f_id, cx);
+                                        }
+                                    })),
+                            )
+                            .child(Icon::new(icon_name).text_color(theme.muted_foreground))
+                            .child(
+                                Button::new(format!("folder-label-{}", folder_id))
+                                    .ghost()
+                                    .label(folder.name.clone())
+                                    .on_click(cx.listener({
+                                        let f_id = folder_id.clone();
+                                        move |this, _, _, cx| {
+                                            this.toggle_folder(&f_id, cx);
+                                        }
+                                    })),
+                            ),
+                    ),
             )
-            .child(menu)
+            .when(!is_collapsed, |this| {
+                this.children(folder.items.iter().map(|child_item| {
+                    self.render_collection_item(child_item, depth + 1, cx).into_any_element()
+                }))
+            })
+    }
+
+    fn render_request_row(
+        &self,
+        name: &str,
+        id: &str,
+        method: HttpMethod,
+        is_selected: bool,
+        depth: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let req_id = id.to_string();
+        let req_name = name.to_string();
+        let indent = (depth as f32) * 12.0;
+
+        h_flex()
+            .w_full()
+            .items_center()
+            .justify_between()
+            .px_2()
+            .py_1p5()
+            .rounded_md()
+            .pl(px(indent + 24.))
+            .when(is_selected, |this| {
+                this.bg(rgb(0xe06c1b).opacity(0.15))
+                    .border_1()
+                    .border_color(rgb(0xe06c1b))
+            })
+            .child(
+                Button::new(format!("open-req-{}", req_id))
+                    .ghost()
+                    .label(req_name)
+                    .on_click(cx.listener({
+                        let r_id = req_id.clone();
+                        move |this, _, _, cx| {
+                            this.selected_request_id = Some(r_id.clone());
+                            cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                            cx.notify();
+                        }
+                    })),
+            )
+            .child(
+                Button::new(format!("sel-req-{}", req_id))
+                    .ghost()
+                    .on_click(cx.listener({
+                        let r_id = req_id.clone();
+                        move |this, _, _, cx| {
+                            this.selected_request_id = Some(r_id.clone());
+                            cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                            cx.notify();
+                        }
+                    }))
+                    .child(method_badge(method)),
+            )
     }
 }
 
@@ -237,7 +352,7 @@ fn method_badge(method: HttpMethod) -> impl IntoElement {
     };
 
     div()
-        .px_1()
+        .px_1p5()
         .py_0p5()
         .rounded_xs()
         .text_xs()
