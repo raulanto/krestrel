@@ -120,9 +120,35 @@ mod tests {
             serde_yaml_ng::from_str(&original_content).expect("v1 parse");
         let v2: serde_yaml_ng::Value = serde_yaml_ng::from_str(&serialized).expect("v2 parse");
 
-        // Secret should not be written to plaintext
-        // Check that core info matches
-        assert_eq!(v1["info"]["name"], v2["info"]["name"]);
+        // Check that core info matches exactly
         assert_eq!(v1["opencollection"], v2["opencollection"]);
+        assert_eq!(v1["info"]["name"], v2["info"]["name"]);
+        assert_eq!(v1["info"]["summary"], v2["info"]["summary"]);
+        assert_eq!(v1["info"]["version"], v2["info"]["version"]);
+
+        // Items and folders match structure
+        assert_eq!(
+            v1["items"].as_sequence().unwrap().len(),
+            v2["items"].as_sequence().unwrap().len()
+        );
+        assert_eq!(
+            v1["items"][0]["info"]["name"],
+            v2["items"][0]["info"]["name"]
+        );
+        assert_eq!(
+            v1["items"][0]["info"]["type"],
+            v2["items"][0]["info"]["type"]
+        );
+        assert_eq!(
+            v1["items"][1]["info"]["name"],
+            v2["items"][1]["info"]["name"]
+        );
+
+        // Secrets are not written in plaintext per AGENTS.md
+        assert_eq!(
+            v2["config"]["environments"][0]["variables"][1]["secret"],
+            true
+        );
+        assert!(v2["config"]["environments"][0]["variables"][1]["value"].is_null());
     }
 }

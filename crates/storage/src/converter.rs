@@ -44,6 +44,24 @@ pub fn doc_to_collection(doc: OpenCollectionDocument) -> Collection {
         .collect();
 
     let mut extra = IndexMap::new();
+    // Preserve info fields that might have custom attributes or version
+    if let Some(version) = &doc.info.version {
+        extra.insert(
+            "_info_version".to_string(),
+            serde_json::Value::String(version.clone()),
+        );
+    }
+    if let Some(desc) = &doc.info.description {
+        extra.insert(
+            "_info_description".to_string(),
+            serde_json::Value::String(desc.clone()),
+        );
+    }
+    for (k, v) in doc.info.extra {
+        if let Ok(json_v) = serde_json::to_value(v) {
+            extra.insert(format!("_info_extra_{}", k), json_v);
+        }
+    }
     for (k, v) in doc.extra {
         if let Ok(json_v) = serde_json::to_value(v) {
             extra.insert(k, json_v);
@@ -95,8 +113,24 @@ pub fn collection_to_doc(collection: &Collection) -> OpenCollectionDocument {
         .collect();
 
     let mut extra = IndexMap::new();
+    let mut info_version = Some("1.0.0".to_string());
+    let mut info_description = None;
+    let mut info_extra = IndexMap::new();
+
     for (k, v) in &collection.extra {
-        if let Ok(yaml_v) = serde_yaml_ng::to_value(v) {
+        if k == "_info_version" {
+            if let Some(s) = v.as_str() {
+                info_version = Some(s.to_string());
+            }
+        } else if k == "_info_description" {
+            if let Some(s) = v.as_str() {
+                info_description = Some(s.to_string());
+            }
+        } else if let Some(stripped) = k.strip_prefix("_info_extra_") {
+            if let Ok(yaml_v) = serde_yaml_ng::to_value(v) {
+                info_extra.insert(stripped.to_string(), yaml_v);
+            }
+        } else if let Ok(yaml_v) = serde_yaml_ng::to_value(v) {
             extra.insert(k.clone(), yaml_v);
         }
     }
@@ -106,9 +140,9 @@ pub fn collection_to_doc(collection: &Collection) -> OpenCollectionDocument {
         info: CollectionInfoDoc {
             name: collection.name.clone(),
             summary: collection.description.clone(),
-            description: None,
-            version: Some("1.0.0".to_string()),
-            extra: IndexMap::new(),
+            description: info_description,
+            version: info_version,
+            extra: info_extra,
         },
         bundled: true,
         items,
@@ -282,25 +316,47 @@ fn collection_item_to_doc_item(item: &CollectionItem) -> ItemDoc {
                 .collect();
 
             let auth = serialize_auth(&req.auth);
+            let is_graphql = matches!(req.body, Body::GraphQL { .. });
             let body = serialize_body(&req.body);
+
+            let (item_type, http, graphql) = if is_graphql {
+                (
+                    "graphql".to_string(),
+                    None,
+                    Some(GraphqlDetailsDoc {
+                        url: req.url.clone(),
+                        headers,
+                        params,
+                        auth,
+                        body,
+                        extra: IndexMap::new(),
+                    }),
+                )
+            } else {
+                (
+                    "http".to_string(),
+                    Some(HttpDetailsDoc {
+                        method: format!("{:?}", req.method),
+                        url: req.url.clone(),
+                        headers,
+                        params,
+                        auth,
+                        body,
+                        extra: IndexMap::new(),
+                    }),
+                    None,
+                )
+            };
 
             ItemDoc {
                 info: ItemInfoDoc {
                     name: req.name.clone(),
-                    item_type: "http".to_string(),
+                    item_type,
                     description: req.description.clone(),
                     extra: IndexMap::new(),
                 },
-                http: Some(HttpDetailsDoc {
-                    method: format!("{:?}", req.method),
-                    url: req.url.clone(),
-                    headers,
-                    params,
-                    auth,
-                    body,
-                    extra: IndexMap::new(),
-                }),
-                graphql: None,
+                http,
+                graphql,
                 items: Vec::new(),
                 extra,
             }

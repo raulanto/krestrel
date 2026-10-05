@@ -18,6 +18,8 @@ use super::search::filter_collection_items;
 
 pub enum SidebarEvent {
     SelectRequest(String),
+    OpenCollection,
+    SaveCollection,
 }
 
 pub struct Sidebar {
@@ -64,6 +66,10 @@ impl Sidebar {
         self.collection.as_ref()
     }
 
+    pub fn collection_mut(&mut self) -> Option<&mut Collection> {
+        self.collection.as_mut()
+    }
+
     pub fn select_request(&mut self, request_id: String, cx: &mut Context<Self>) {
         self.selected_request_id = Some(request_id);
         cx.notify();
@@ -107,20 +113,49 @@ impl Render for Sidebar {
                     .border_color(theme.border)
                     .bg(theme.muted.opacity(0.12))
                     .child(
-                        h_flex().items_center().justify_between().w_full().child(
-                            h_flex()
-                                .items_center()
-                                .gap_2()
-                                .child(Icon::new(IconName::FolderOpen).text_color(rgb(0xe06c1b)))
-                                .child(
-                                    div()
-                                        .font_weight(FontWeight::BOLD)
-                                        .text_sm()
-                                        .text_color(theme.foreground)
-                                        .text_ellipsis()
-                                        .child(collection_name),
-                                ),
-                        ),
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .w_full()
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Icon::new(IconName::FolderOpen).text_color(rgb(0xe06c1b)),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_sm()
+                                            .text_color(theme.foreground)
+                                            .text_ellipsis()
+                                            .child(collection_name),
+                                    ),
+                            )
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(
+                                        Button::new("btn-open-col")
+                                            .ghost()
+                                            .tooltip("Recargar / Abrir colección...")
+                                            .icon(Icon::new(IconName::FolderOpen))
+                                            .on_click(cx.listener(|_this, _, _, cx| {
+                                                cx.emit(SidebarEvent::OpenCollection);
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("btn-save-col")
+                                            .ghost()
+                                            .tooltip("Guardar colección a disco")
+                                            .icon(Icon::new(IconName::HardDrive))
+                                            .on_click(cx.listener(|_this, _, _, cx| {
+                                                cx.emit(SidebarEvent::SaveCollection);
+                                            })),
+                                    ),
+                            ),
                     )
                     .child(
                         Input::new(&self.search_input)

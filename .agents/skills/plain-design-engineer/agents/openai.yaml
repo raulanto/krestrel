@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plain Design Engineer"
+  short_description: "Plain, technical infrastructure-product UI"
+  default_prompt: "Use $plain-design-engineer to review or redesign this interface with a plain, technical, evidence-led infrastructure-product style."

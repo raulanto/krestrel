@@ -41,6 +41,40 @@ impl Collection {
     pub fn find_request(&self, id: &str) -> Option<&Request> {
         find_request_in_items(&self.items, id)
     }
+
+    pub fn find_request_mut(&mut self, id: &str) -> Option<&mut Request> {
+        find_request_in_items_mut(&mut self.items, id)
+    }
+
+    pub fn update_request(&mut self, request: Request) -> bool {
+        if let Some(target) = self.find_request_mut(&request.id) {
+            *target = request;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+fn find_request_in_items_mut<'a>(
+    items: &'a mut [CollectionItem],
+    id: &str,
+) -> Option<&'a mut Request> {
+    for item in items {
+        match item {
+            CollectionItem::Request(req) => {
+                if req.id == id {
+                    return Some(req);
+                }
+            }
+            CollectionItem::Folder(folder) => {
+                if let Some(req) = find_request_in_items_mut(&mut folder.items, id) {
+                    return Some(req);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn find_request_in_items<'a>(items: &'a [CollectionItem], id: &str) -> Option<&'a Request> {

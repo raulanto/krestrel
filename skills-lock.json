@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "skills": {
+    "build-gpui-apps": {
+      "source": "skills.lassejlv.dk",
+      "sourceUrl": "https://skills.lassejlv.dk/skills/build-gpui-apps",
+      "sourceType": "well-known",
+      "computedHash": "8d25d6cc5942de30a236e1f1bb2b0758be45f4d9adb77ca4ad5a5c5b0e091c68",
+      "wellKnownDigest": "sha256:a10fe556b45687e7f062a7cbe54ddf98a5e34de9862be6f6282693d6e62e817b"
+    },
+    "plain-design-engineer": {
+      "source": "skills.lassejlv.dk",
+      "sourceUrl": "https://skills.lassejlv.dk/skills/plain-design-engineer",
+      "sourceType": "well-known",
+      "computedHash": "29f37ec079ab0468357dfde39db4d0e99b7c253777ffa2a0b3f636ed6d7a6be5",
+      "wellKnownDigest": "sha256:a043c79186df912232e909ffa84415c6a16f72a5144ea0fefb9193c926acb286"
+    }
+  }
+}

@@ -13,7 +13,7 @@ use gpui_kit::component::{
 };
 use kestrel_core::Request;
 use kestrel_http::HttpClient;
-use kestrel_storage::load_collection_file;
+use kestrel_storage::{load_collection_file, save_collection_file};
 use kestrel_ui::views::{
     EditorEvent, EnvironmentEvent, EnvironmentModal, RequestEditor, ResponsePanel, Sidebar,
     SidebarEvent, TabBarEvent, TabItem, WorkspaceTabBar,
@@ -28,6 +28,7 @@ struct KestrelWorkspace {
     http_client: Arc<HttpClient>,
     open_requests: Vec<Request>,
     active_environment_name: String,
+    collection_path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -46,6 +47,12 @@ impl KestrelWorkspace {
             |this, _, ev: &SidebarEvent, window, cx| match ev {
                 SidebarEvent::SelectRequest(req_id) => {
                     this.open_or_select_request(req_id, window, cx);
+                }
+                SidebarEvent::OpenCollection => {
+                    this.open_collection_prompt(window, cx);
+                }
+                SidebarEvent::SaveCollection => {
+                    this.save_current_collection(cx);
                 }
             },
         );
@@ -150,6 +157,7 @@ impl KestrelWorkspace {
             http_client,
             open_requests: Vec::new(),
             active_environment_name: first_env_name,
+            collection_path: Some(example_path),
             _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env],
         };
 
@@ -316,6 +324,92 @@ impl KestrelWorkspace {
             });
         })
         .detach();
+    }
+
+    fn open_collection_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // As a default convenient path, open the basic opencollection example or current path
+        let target_path = self
+            .collection_path
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("examples/basic_opencollection.yaml"));
+
+        if let Ok(col) = load_collection_file(&target_path) {
+            let envs = col.environments.clone();
+            let first_env_id = envs.first().map(|e| e.id.clone());
+            let first_env_name = envs
+                .first()
+                .map(|e| e.name.clone())
+                .unwrap_or_else(|| "Sin entorno".to_string());
+            let active_env_clone = envs.first().cloned();
+
+            self.active_environment_name = first_env_name;
+            self.collection_path = Some(target_path);
+
+            self.sidebar.update(cx, |s, cx| {
+                s.set_collection(col.clone(), cx);
+            });
+
+            self.editor.update(cx, |ed, cx| {
+                ed.set_active_environment(active_env_clone, cx);
+            });
+
+            self.env_modal.update(cx, |em, cx| {
+                em.set_environments(envs, first_env_id, cx);
+            });
+
+            // Clear open requests and open first
+            self.open_requests.clear();
+            fn find_first(items: &[kestrel_core::CollectionItem]) -> Option<String> {
+                for item in items {
+                    match item {
+                        kestrel_core::CollectionItem::Request(r) => return Some(r.id.clone()),
+                        kestrel_core::CollectionItem::Folder(f) => {
+                            if let Some(id) = find_first(&f.items) {
+                                return Some(id);
+                            }
+                        }
+                    }
+                }
+                None
+            }
+
+            if let Some(req_id) = find_first(&col.items) {
+                self.open_or_select_request(&req_id, window, cx);
+            }
+            cx.notify();
+        }
+    }
+
+    fn save_current_collection(&mut self, cx: &mut Context<Self>) {
+        // First sync current active request from editor into the collection
+        if let Some(current_req) = self.editor.read(cx).build_current_request(cx) {
+            self.sidebar.update(cx, |s, _cx| {
+                if let Some(col) = s.collection_mut() {
+                    col.update_request(current_req);
+                }
+            });
+        }
+
+        // Sync environments from env_modal
+        let envs: Vec<_> = self.env_modal.read(cx).all_environments().to_vec();
+        self.sidebar.update(cx, |s, _cx| {
+            if let Some(col) = s.collection_mut() {
+                col.environments = envs;
+            }
+        });
+
+        if let Some(col) = self.sidebar.read(cx).collection() {
+            let save_path = self
+                .collection_path
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("examples/basic_opencollection.yaml"));
+
+            if let Err(e) = save_collection_file(&save_path, col) {
+                tracing::error!("Error al guardar la colección: {}", e);
+            } else {
+                tracing::info!("Colección guardada exitosamente en {:?}", save_path);
+            }
+        }
     }
 }
 
