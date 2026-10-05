@@ -13,8 +13,8 @@ use gpui_kit::component::{
 use kestrel_core::Request;
 use kestrel_storage::load_collection_file;
 use kestrel_ui::views::{
-    EditorEvent, RequestEditor, ResponsePanel, Sidebar, SidebarEvent, TabBarEvent, TabItem,
-    WorkspaceTabBar,
+    EditorEvent, EnvironmentEvent, EnvironmentModal, RequestEditor, ResponsePanel, Sidebar,
+    SidebarEvent, TabBarEvent, TabItem, WorkspaceTabBar,
 };
 
 struct KestrelWorkspace {
@@ -22,8 +22,9 @@ struct KestrelWorkspace {
     tab_bar: Entity<WorkspaceTabBar>,
     editor: Entity<RequestEditor>,
     response: Entity<ResponsePanel>,
+    env_modal: Entity<EnvironmentModal>,
     open_requests: Vec<Request>,
-    active_environment: String,
+    active_environment_name: String,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -33,6 +34,7 @@ impl KestrelWorkspace {
         let tab_bar = cx.new(|_cx| WorkspaceTabBar::new());
         let editor = cx.new(|cx| RequestEditor::new(window, cx));
         let response = cx.new(|_cx| ResponsePanel::new());
+        let env_modal = cx.new(|cx| EnvironmentModal::new(window, cx));
 
         // Subscriptions
         let sub_sidebar = cx.subscribe_in(
@@ -88,22 +90,61 @@ impl KestrelWorkspace {
             },
         );
 
+        let sub_env = cx.subscribe_in(
+            &env_modal,
+            window,
+            |this, _, ev: &EnvironmentEvent, _window, cx| match ev {
+                EnvironmentEvent::EnvironmentSelected(env_id) => {
+                    this.apply_selected_environment(env_id, cx);
+                }
+                EnvironmentEvent::EnvironmentModified(_env) => {
+                    // Update active environment in editor if currently selected
+                    if let Some(active_env) = this.env_modal.read(cx).active_environment().cloned()
+                    {
+                        this.active_environment_name = active_env.name.clone();
+                        this.editor.update(cx, |ed, cx| {
+                            ed.set_active_environment(Some(active_env), cx);
+                        });
+                    }
+                }
+                EnvironmentEvent::CloseRequested => {}
+            },
+        );
+
         // Load example collection by default
         let example_path = PathBuf::from("examples/basic_opencollection.yaml");
+        let mut initial_envs = Vec::new();
         if let Ok(col) = load_collection_file(&example_path) {
+            initial_envs = col.environments.clone();
             sidebar.update(cx, |s, cx| {
                 s.set_collection(col, cx);
             });
         }
+
+        let first_env_id = initial_envs.first().map(|e| e.id.clone());
+        let first_env_name = initial_envs
+            .first()
+            .map(|e| e.name.clone())
+            .unwrap_or_else(|| "Sin entorno".to_string());
+
+        let active_env_clone = initial_envs.first().cloned();
+        editor.update(cx, |ed, cx| {
+            ed.set_active_environment(active_env_clone, cx);
+        });
+
+        env_modal.update(cx, |em, cx| {
+            em.set_environments(initial_envs, first_env_id, cx);
+        });
 
         let mut workspace = Self {
             sidebar,
             tab_bar,
             editor,
             response,
+            env_modal,
             open_requests: Vec::new(),
-            active_environment: "Development".to_string(),
-            _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor],
+            active_environment_name: first_env_name,
+            _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env],
         };
 
         // Open first request from collection if available
@@ -129,6 +170,23 @@ impl KestrelWorkspace {
         }
 
         workspace
+    }
+
+    fn apply_selected_environment(&mut self, env_id: &str, cx: &mut Context<Self>) {
+        if let Some(env) = self
+            .env_modal
+            .read(cx)
+            .all_environments()
+            .iter()
+            .find(|e| e.id == env_id)
+            .cloned()
+        {
+            self.active_environment_name = env.name.clone();
+            self.editor.update(cx, |ed, cx| {
+                ed.set_active_environment(Some(env), cx);
+            });
+            cx.notify();
+        }
     }
 
     fn open_or_select_request(
@@ -219,104 +277,137 @@ impl KestrelWorkspace {
 impl Render for KestrelWorkspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let env_name = self.active_environment.clone();
+        let env_name = self.active_environment_name.clone();
 
-        v_flex()
+        div()
             .size_full()
-            .bg(theme.background)
-            .text_color(theme.foreground)
-            // 1. Top Window Application Bar (Collection, Quick Switcher, Environment Selector)
+            .relative()
             .child(
-                h_flex()
-                    .h(px(42.))
-                    .w_full()
-                    .px_3()
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted.opacity(0.15))
-                    .items_center()
-                    .justify_between()
-                    // Left: Traffic light buffer + collection indicator
+                v_flex()
+                    .size_full()
+                    .bg(theme.background)
+                    .text_color(theme.foreground)
+                    // 1. Top Window Application Bar (Collection, Quick Switcher, Environment Selector)
                     .child(
                         h_flex()
+                            .h(px(42.))
+                            .w_full()
+                            .px_3()
+                            .border_b_1()
+                            .border_color(theme.border)
+                            .bg(theme.muted.opacity(0.15))
                             .items_center()
-                            .gap_2()
+                            .justify_between()
+                            // Left: Collection indicator
                             .child(
                                 h_flex()
                                     .items_center()
-                                    .gap_1p5()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded_md()
-                                    .border_1()
-                                    .border_color(theme.border)
-                                    .bg(theme.background)
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(Icon::new(IconName::Globe))
-                                    .child(div().child("Kestrel API Client")),
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_1p5()
+                                            .px_2()
+                                            .py_1()
+                                            .rounded_md()
+                                            .border_1()
+                                            .border_color(theme.border)
+                                            .bg(theme.background)
+                                            .text_xs()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child(Icon::new(IconName::Globe))
+                                            .child(div().child("Kestrel API Client")),
+                                    )
+                                    .child(
+                                        Button::new("quick-add-btn")
+                                            .ghost()
+                                            .icon(Icon::new(IconName::Plus)),
+                                    ),
                             )
+                            // Right: Environment Selector Pill + View controls
                             .child(
-                                Button::new("quick-add-btn")
-                                    .ghost()
-                                    .icon(Icon::new(IconName::Plus)),
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        Button::new("env-selector-pill-btn")
+                                            .ghost()
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.env_modal.update(cx, |em, cx| {
+                                                    em.open(cx);
+                                                });
+                                            }))
+                                            .child(
+                                                h_flex()
+                                                    .items_center()
+                                                    .gap_1p5()
+                                                    .px_2p5()
+                                                    .h(px(28.))
+                                                    .rounded_md()
+                                                    .border_1()
+                                                    .border_color(theme.border)
+                                                    .bg(theme.background)
+                                                    .text_xs()
+                                                    .child(
+                                                        div()
+                                                            .size(px(7.))
+                                                            .rounded_full()
+                                                            .bg(rgb(0x22c55e)), // Active green dot
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child(env_name),
+                                                    )
+                                                    .child(Icon::new(IconName::ChevronDown)),
+                                            ),
+                                    )
+                                    .child(
+                                        Button::new("toggle-panels-btn")
+                                            .ghost()
+                                            .icon(Icon::new(IconName::PanelRight)),
+                                    ),
                             ),
                     )
-                    // Right: Environment Selector Pill + View controls
+                    // 2. Main Workspace Layout (Sidebar + Request Tabs + Split Editor/Response)
                     .child(
                         h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_1p5()
-                                    .px_3()
-                                    .h(px(28.))
-                                    .rounded_md()
-                                    .border_1()
-                                    .border_color(theme.border)
-                                    .bg(theme.background)
-                                    .text_xs()
-                                    .child(
-                                        div().size(px(7.)).rounded_full().bg(rgb(0x22c55e)), // Active green dot
-                                    )
-                                    .child(div().font_weight(FontWeight::MEDIUM).child(env_name))
-                                    .child(Icon::new(IconName::ChevronDown)),
-                            )
-                            .child(
-                                Button::new("toggle-panels-btn")
-                                    .ghost()
-                                    .icon(Icon::new(IconName::PanelRight)),
-                            ),
-                    ),
-            )
-            // 2. Main Workspace Layout (Sidebar + Request Tabs + Split Editor/Response)
-            .child(
-                h_flex()
-                    .flex_1()
-                    .size_full()
-                    // Left Column: Native Sidebar
-                    .child(self.sidebar.clone())
-                    // Right Column: Tab Bar + Editor & Response Panels
-                    .child(
-                        v_flex()
                             .flex_1()
                             .size_full()
-                            .child(self.tab_bar.clone())
+                            // Left Column: Native Tree Sidebar
+                            .child(self.sidebar.clone())
+                            // Right Column: Tab Bar + Editor & Response Panels
                             .child(
                                 v_flex()
                                     .flex_1()
                                     .size_full()
-                                    // Top Half: Request Editor
-                                    .child(div().flex_1().size_full().child(self.editor.clone()))
-                                    // Subtle horizontal separator
-                                    .child(div().h(px(1.)).w_full().bg(theme.border))
-                                    // Bottom Half: Response Panel
-                                    .child(div().h(px(320.)).w_full().child(self.response.clone())),
+                                    .child(self.tab_bar.clone())
+                                    .child(
+                                        v_flex()
+                                            .flex_1()
+                                            .size_full()
+                                            // Top Half: Request Editor
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .size_full()
+                                                    .child(self.editor.clone()),
+                                            )
+                                            // Subtle horizontal separator
+                                            .child(div().h(px(1.)).w_full().bg(theme.border))
+                                            // Bottom Half: Response Panel
+                                            .child(
+                                                div()
+                                                    .h(px(320.))
+                                                    .w_full()
+                                                    .child(self.response.clone()),
+                                            ),
+                                    ),
                             ),
                     ),
             )
+            // 3. Floating Modal overlay for Environment & Variables Management
+            .child(self.env_modal.clone())
     }
 }
 

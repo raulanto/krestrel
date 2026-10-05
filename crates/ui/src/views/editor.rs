@@ -56,6 +56,7 @@ pub struct RequestEditor {
     auth_pass_input: Entity<InputState>,
     auth_key_name_input: Entity<InputState>,
     auth_key_val_input: Entity<InputState>,
+    active_environment: Option<kestrel_core::Environment>,
     is_dirty: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -150,9 +151,19 @@ impl RequestEditor {
             auth_pass_input,
             auth_key_name_input,
             auth_key_val_input,
+            active_environment: None,
             is_dirty: false,
             _subscriptions: vec![sub_url, sub_body],
         }
+    }
+
+    pub fn set_active_environment(
+        &mut self,
+        env: Option<kestrel_core::Environment>,
+        cx: &mut Context<Self>,
+    ) {
+        self.active_environment = env;
+        cx.notify();
     }
 
     pub fn set_request(&mut self, req: Request, window: &mut Window, cx: &mut Context<Self>) {
@@ -830,28 +841,69 @@ impl RequestEditor {
 
     fn render_path_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let url = self.url_input.read(cx).value();
+        let raw_url = self.url_input.read(cx).value();
+        let resolved_url = if let Some(env) = &self.active_environment {
+            kestrel_core::resolve_variables(&raw_url, &[env])
+        } else {
+            raw_url.to_string()
+        };
 
         v_flex()
             .flex_1()
             .size_full()
             .p_4()
-            .gap_2()
-            .child(div().font_weight(FontWeight::BOLD).text_xs().child("Ruta URL y Segmentos"))
+            .gap_3()
             .child(
-                div()
-                    .font_family("monospace")
-                    .text_xs()
-                    .p_3()
-                    .rounded_md()
-                    .bg(theme.muted.opacity(0.4))
-                    .child(url.to_string()),
+                v_flex()
+                    .gap_1()
+                    .child(div().font_weight(FontWeight::BOLD).text_xs().child("Ruta URL cruda (con variables):"))
+                    .child(
+                        div()
+                            .font_family("monospace")
+                            .text_xs()
+                            .p_3()
+                            .rounded_md()
+                            .bg(theme.muted.opacity(0.4))
+                            .child(raw_url.to_string()),
+                    ),
+            )
+            .child(
+                v_flex()
+                    .gap_1()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().font_weight(FontWeight::BOLD).text_xs().child("Ruta URL resuelta:"))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(0x22c55e))
+                                    .child(if self.active_environment.is_some() {
+                                        "✓ Entorno activo aplicado"
+                                    } else {
+                                        "⚠ Sin entorno activo"
+                                    }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .font_family("monospace")
+                            .text_xs()
+                            .p_3()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(theme.border)
+                            .bg(theme.background)
+                            .child(resolved_url),
+                    ),
             )
             .child(
                 div()
                     .text_xs()
                     .text_color(theme.muted_foreground)
-                    .child("Las variables de entorno en la URL (ej. {{baseUrl}}) se resolverán automáticamente al enviar."),
+                    .child("Las variables de entorno en la URL (ej. {{baseUrl}}) se resuelven dinámicamente con los valores del entorno seleccionado."),
             )
     }
 
