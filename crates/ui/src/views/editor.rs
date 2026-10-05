@@ -139,6 +139,32 @@ impl RequestEditor {
             },
         );
 
+        let sub_graphql_vars = cx.subscribe_in(
+            &graphql_vars_input,
+            window,
+            |this, _, ev: &InputEvent, _window, cx| {
+                if let InputEvent::Change = ev {
+                    let vars_str = this.graphql_vars_input.read(cx).value().to_string();
+                    let vars = if vars_str.trim().is_empty() {
+                        None
+                    } else {
+                        Some(vars_str)
+                    };
+                    if let Some(req) = &mut this.request
+                        && let Body::GraphQL { query, .. } = &req.body
+                    {
+                        req.body = Body::GraphQL {
+                            query: query.clone(),
+                            variables: vars,
+                        };
+                    }
+                    this.is_dirty = true;
+                    cx.emit(EditorEvent::RequestModified);
+                    cx.notify();
+                }
+            },
+        );
+
         Self {
             request: None,
             active_tab: EditorTab::Body,
@@ -153,7 +179,7 @@ impl RequestEditor {
             auth_key_val_input,
             active_environment: None,
             is_dirty: false,
-            _subscriptions: vec![sub_url, sub_body],
+            _subscriptions: vec![sub_url, sub_body, sub_graphql_vars],
         }
     }
 
@@ -419,6 +445,24 @@ impl RequestEditor {
         self.is_dirty = true;
         cx.emit(EditorEvent::RequestModified);
         cx.notify();
+    }
+
+    fn prettify_json_body(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let current_val = self.body_input.read(cx).value().to_string();
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&current_val)
+            && let Ok(pretty) = serde_json::to_string_pretty(&parsed)
+        {
+            let pretty_clone = pretty.clone();
+            self.body_input.update(cx, |input, cx| {
+                input.set_value(pretty_clone, window, cx);
+            });
+            if let Some(req) = &mut self.request {
+                req.body = Body::Json { content: pretty };
+            }
+            self.is_dirty = true;
+            cx.emit(EditorEvent::RequestModified);
+            cx.notify();
+        }
     }
 
     // Add query parameter
@@ -695,7 +739,20 @@ impl RequestEditor {
                         "GraphQL",
                         selected_format == BodyFormat::GraphQL,
                         cx.listener(|this, _, _, cx| this.set_body_format(BodyFormat::GraphQL, cx)),
-                    )),
+                    ))
+                    .when(selected_format == BodyFormat::Json, |this| {
+                        this.child(
+                            h_flex().flex_1().justify_end().child(
+                                Button::new("btn-prettify-json")
+                                    .ghost()
+                                    .label("Formatear JSON")
+                                    .tooltip("Prettify JSON con indentación estándar")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.prettify_json_body(window, cx);
+                                    })),
+                            ),
+                        )
+                    }),
             )
             // Body Input Canvas
             .child(
