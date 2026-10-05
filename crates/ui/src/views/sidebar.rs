@@ -83,6 +83,31 @@ impl Sidebar {
         }
         cx.notify();
     }
+
+    fn toggle_all_folders(&mut self, cx: &mut Context<Self>) {
+        let Some(col) = &self.collection else { return };
+
+        fn collect_folder_ids(items: &[CollectionItem], ids: &mut Vec<String>) {
+            for item in items {
+                if let CollectionItem::Folder(f) = item {
+                    ids.push(f.id.clone());
+                    collect_folder_ids(&f.items, ids);
+                }
+            }
+        }
+
+        let mut all_ids = Vec::new();
+        collect_folder_ids(&col.items, &mut all_ids);
+
+        if self.collapsed_folders.is_empty() {
+            // Collapse all
+            self.collapsed_folders = all_ids.into_iter().collect();
+        } else {
+            // Expand all
+            self.collapsed_folders.clear();
+        }
+        cx.notify();
+    }
 }
 
 impl gpui::EventEmitter<SidebarEvent> for Sidebar {}
@@ -137,6 +162,15 @@ impl Render for Sidebar {
                                 h_flex()
                                     .items_center()
                                     .gap_1()
+                                    .child(
+                                        Button::new("btn-toggle-folders")
+                                            .ghost()
+                                            .tooltip("Colapsar / Expandir carpetas")
+                                            .icon(Icon::new(IconName::ChevronsUpDown))
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.toggle_all_folders(cx);
+                                            })),
+                                    )
                                     .child(
                                         Button::new("btn-open-col")
                                             .ghost()
@@ -212,33 +246,132 @@ impl Sidebar {
                 v_flex()
                     .gap_1()
                     .w_full()
-                    .children(filtered.into_iter().map(|f_item| {
-                        match f_item.kind {
-                            super::search::FilteredItemKind::Folder => h_flex()
+                    .children(filtered.into_iter().map(|f_item| match f_item.kind {
+                        super::search::FilteredItemKind::Folder => {
+                            let folder_path = if f_item.path.is_empty() {
+                                f_item.name
+                            } else {
+                                format!("{}/{}", f_item.path.join("/"), f_item.name)
+                            };
+                            h_flex()
                                 .px_2()
-                                .py_1p5()
-                                .gap_2()
+                                .py_1()
+                                .gap_1p5()
                                 .items_center()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(Icon::new(IconName::Folder))
-                                .child(f_item.name)
-                                .into_any_element(),
-                            super::search::FilteredItemKind::Request(method) => {
-                                let req_id = f_item.id.clone();
-                                let is_selected =
-                                    self.selected_request_id.as_deref() == Some(&f_item.id);
-
-                                self.render_request_row(
-                                    &f_item.name,
-                                    &req_id,
-                                    method,
-                                    is_selected,
-                                    0,
-                                    cx,
+                                .child(Icon::new(IconName::Folder).text_color(rgb(0xe06c1b)))
+                                .child(
+                                    div()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_ellipsis()
+                                        .child(folder_path),
                                 )
                                 .into_any_element()
-                            }
+                        }
+                        super::search::FilteredItemKind::Request(method) => {
+                            let req_id = f_item.id.clone();
+                            let req_name = f_item.name.clone();
+                            let is_selected =
+                                self.selected_request_id.as_deref() == Some(&f_item.id);
+                            let breadcrumb = if f_item.path.is_empty() {
+                                None
+                            } else {
+                                Some(f_item.path.join(" / "))
+                            };
+                            let url_preview = f_item.url.clone();
+
+                            h_flex()
+                                .w_full()
+                                .px_2()
+                                .child(
+                                    Button::new(format!("search-req-{}", req_id))
+                                        .ghost()
+                                        .w_full()
+                                        .on_click(cx.listener({
+                                            let r_id = req_id.clone();
+                                            move |this, _, _, cx| {
+                                                this.selected_request_id = Some(r_id.clone());
+                                                cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                                                cx.notify();
+                                            }
+                                        }))
+                                        .child(
+                                            v_flex()
+                                                .w_full()
+                                                .py_1()
+                                                .gap_0p5()
+                                                .child(
+                                                    h_flex()
+                                                        .w_full()
+                                                        .items_center()
+                                                        .justify_between()
+                                                        .gap_2()
+                                                        .child(
+                                                            h_flex()
+                                                                .items_center()
+                                                                .gap_2()
+                                                                .flex_1()
+                                                                .child(method_badge(method))
+                                                                .child(
+                                                                    div()
+                                                                        .text_xs()
+                                                                        .font_weight(
+                                                                            if is_selected {
+                                                                                FontWeight::SEMIBOLD
+                                                                            } else {
+                                                                                FontWeight::NORMAL
+                                                                            },
+                                                                        )
+                                                                        .text_color(
+                                                                            cx.theme().foreground,
+                                                                        )
+                                                                        .when(is_selected, |this| {
+                                                                            this.text_color(rgb(
+                                                                                0xe06c1b,
+                                                                            ))
+                                                                        })
+                                                                        .text_ellipsis()
+                                                                        .child(req_name),
+                                                                ),
+                                                        )
+                                                        .when(is_selected, |this| {
+                                                            this.child(
+                                                                div()
+                                                                    .size(px(6.))
+                                                                    .rounded_full()
+                                                                    .bg(rgb(0xe06c1b)),
+                                                            )
+                                                        }),
+                                                )
+                                                .when_some(breadcrumb, |this, bc| {
+                                                    this.child(
+                                                        div()
+                                                            .pl_6()
+                                                            .text_xs()
+                                                            .text_color(cx.theme().muted_foreground)
+                                                            .text_ellipsis()
+                                                            .child(bc),
+                                                    )
+                                                })
+                                                .when_some(url_preview, |this, u| {
+                                                    this.child(
+                                                        div()
+                                                            .pl_6()
+                                                            .text_xs()
+                                                            .font_family("monospace")
+                                                            .text_color(
+                                                                cx.theme()
+                                                                    .muted_foreground
+                                                                    .opacity(0.8),
+                                                            )
+                                                            .text_ellipsis()
+                                                            .child(u),
+                                                    )
+                                                }),
+                                        ),
+                                )
+                                .into_any_element()
                         }
                     }))
                     .into_any_element()

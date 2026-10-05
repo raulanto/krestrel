@@ -6,6 +6,7 @@ pub struct FilteredItem {
     pub name: String,
     pub kind: FilteredItemKind,
     pub path: Vec<String>,
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +46,7 @@ pub fn filter_collection_items(
                         name: name.clone(),
                         kind: FilteredItemKind::Folder,
                         path: current_path.to_vec(),
+                        url: None,
                     });
                     results.extend(sub_results);
                 }
@@ -66,6 +68,7 @@ pub fn filter_collection_items(
                         name: name.clone(),
                         kind: FilteredItemKind::Request(*method),
                         path: current_path.to_vec(),
+                        url: Some(url.clone()),
                     });
                 }
             }
@@ -178,10 +181,16 @@ mod tests {
         let results = filter_collection(&collection, "user");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Get Users");
+        assert_eq!(results[0].url.as_deref(), Some("https://api.test/users"));
 
         let results_folder = filter_collection(&collection, "log");
         assert_eq!(results_folder.len(), 2); // Includes folder Auth because child matched
         assert_eq!(results_folder[0].name, "Auth");
+        assert!(results_folder[0].url.is_none());
         assert_eq!(results_folder[1].name, "Login");
+        assert_eq!(
+            results_folder[1].url.as_deref(),
+            Some("https://api.test/login")
+        );
     }
 }
