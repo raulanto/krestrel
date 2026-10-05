@@ -732,16 +732,33 @@ impl RequestEditor {
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
+                            .p_4()
                             .child("Sin encabezados configurados")
                     } else {
                         v_flex()
-                            .gap_2()
+                            .gap_1p5()
                             .children(headers.into_iter().enumerate().map(|(ix, h)| {
                                 h_flex()
-                                    .gap_2()
+                                    .gap_3()
                                     .items_center()
-                                    .child(div().w(px(200.)).child(format!("{}:", h.key)))
-                                    .child(div().flex_1().child(h.value))
+                                    .px_3()
+                                    .py_2()
+                                    .rounded_md()
+                                    .bg(theme.muted.opacity(0.18))
+                                    .child(
+                                        div()
+                                            .w(px(180.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_xs()
+                                            .child(h.key),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .font_family("monospace")
+                                            .text_xs()
+                                            .child(h.value),
+                                    )
                                     .child(
                                         Button::new(format!("del-hdr-{}", ix))
                                             .ghost()
@@ -808,16 +825,33 @@ impl RequestEditor {
                         div()
                             .text_sm()
                             .text_color(theme.muted_foreground)
+                            .p_4()
                             .child("Sin parámetros de consulta")
                     } else {
                         v_flex()
-                            .gap_2()
+                            .gap_1p5()
                             .children(params.into_iter().enumerate().map(|(ix, p)| {
                                 h_flex()
-                                    .gap_2()
+                                    .gap_3()
                                     .items_center()
-                                    .child(div().w(px(200.)).child(format!("?{}", p.key)))
-                                    .child(div().flex_1().child(p.value))
+                                    .px_3()
+                                    .py_2()
+                                    .rounded_md()
+                                    .bg(theme.muted.opacity(0.18))
+                                    .child(
+                                        div()
+                                            .w(px(180.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_xs()
+                                            .child(format!("?{}", p.key)),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .font_family("monospace")
+                                            .text_xs()
+                                            .child(p.value),
+                                    )
                                     .child(
                                         Button::new(format!("del-param-{}", ix))
                                             .ghost()
@@ -921,64 +955,66 @@ impl RequestEditor {
             .gap_3()
             .child(
                 h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("auth-none")
-                            .ghost()
-                            .label("None")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(req) = &mut this.request {
-                                    req.auth = Auth::None;
-                                    this.is_dirty = true;
-                                    cx.notify();
-                                }
-                            })),
-                    )
-                    .child(
-                        Button::new("auth-bearer")
-                            .ghost()
-                            .label("Bearer Token")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(req) = &mut this.request {
-                                    req.auth = Auth::Bearer {
-                                        token: String::new(),
-                                    };
-                                    this.is_dirty = true;
-                                    cx.notify();
-                                }
-                            })),
-                    )
-                    .child(
-                        Button::new("auth-basic")
-                            .ghost()
-                            .label("Basic Auth")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(req) = &mut this.request {
-                                    req.auth = Auth::Basic {
-                                        username: String::new(),
-                                        password: String::new(),
-                                    };
-                                    this.is_dirty = true;
-                                    cx.notify();
-                                }
-                            })),
-                    )
-                    .child(
-                        Button::new("auth-apikey")
-                            .ghost()
-                            .label("API Key")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                if let Some(req) = &mut this.request {
-                                    req.auth = Auth::ApiKey {
-                                        key: "X-API-Key".to_string(),
-                                        value: String::new(),
-                                        location: ApiKeyLocation::Header,
-                                    };
-                                    this.is_dirty = true;
-                                    cx.notify();
-                                }
-                            })),
-                    ),
+                    .gap_1p5()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(format_selector_button(
+                        "auth-none",
+                        "None",
+                        matches!(auth, Auth::None),
+                        cx.listener(|this, _, _, cx| {
+                            if let Some(req) = &mut this.request {
+                                req.auth = Auth::None;
+                                this.is_dirty = true;
+                                cx.notify();
+                            }
+                        }),
+                    ))
+                    .child(format_selector_button(
+                        "auth-bearer",
+                        "Bearer Token",
+                        matches!(auth, Auth::Bearer { .. }),
+                        cx.listener(|this, _, _, cx| {
+                            if let Some(req) = &mut this.request {
+                                req.auth = Auth::Bearer {
+                                    token: String::new(),
+                                };
+                                this.is_dirty = true;
+                                cx.notify();
+                            }
+                        }),
+                    ))
+                    .child(format_selector_button(
+                        "auth-basic",
+                        "Basic Auth",
+                        matches!(auth, Auth::Basic { .. }),
+                        cx.listener(|this, _, _, cx| {
+                            if let Some(req) = &mut this.request {
+                                req.auth = Auth::Basic {
+                                    username: String::new(),
+                                    password: String::new(),
+                                };
+                                this.is_dirty = true;
+                                cx.notify();
+                            }
+                        }),
+                    ))
+                    .child(format_selector_button(
+                        "auth-apikey",
+                        "API Key",
+                        matches!(auth, Auth::ApiKey { .. }),
+                        cx.listener(|this, _, _, cx| {
+                            if let Some(req) = &mut this.request {
+                                req.auth = Auth::ApiKey {
+                                    key: "X-API-Key".to_string(),
+                                    value: String::new(),
+                                    location: ApiKeyLocation::Header,
+                                };
+                                this.is_dirty = true;
+                                cx.notify();
+                            }
+                        }),
+                    )),
             )
             .child(
                 div()

@@ -255,42 +255,50 @@ impl Sidebar {
         v_flex()
             .w_full()
             .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .justify_between()
-                    .px_2()
-                    .py_1p5()
-                    .rounded_md()
-                    .pl(px(indent + 8.))
-                    .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Button::new(format!("caret-{}", folder_id))
-                                    .ghost()
-                                    .icon(Icon::new(chevron_name))
-                                    .on_click(cx.listener({
-                                        let f_id = folder_id.clone();
-                                        move |this, _, _, cx| {
-                                            this.toggle_folder(&f_id, cx);
-                                        }
-                                    })),
-                            )
-                            .child(Icon::new(icon_name).text_color(theme.muted_foreground))
-                            .child(
-                                Button::new(format!("folder-label-{}", folder_id))
-                                    .ghost()
-                                    .label(folder.name.clone())
-                                    .on_click(cx.listener({
-                                        let f_id = folder_id.clone();
-                                        move |this, _, _, cx| {
-                                            this.toggle_folder(&f_id, cx);
-                                        }
-                                    })),
-                            ),
-                    ),
+                h_flex().w_full().pl(px(indent + 8.)).pr_2().child(
+                    Button::new(format!("folder-btn-{}", folder_id))
+                        .ghost()
+                        .w_full()
+                        .on_click(cx.listener({
+                            let f_id = folder_id.clone();
+                            move |this, _, _, cx| {
+                                this.toggle_folder(&f_id, cx);
+                            }
+                        }))
+                        .child(
+                            h_flex()
+                                .w_full()
+                                .items_center()
+                                .justify_between()
+                                .gap_2()
+                                .py_0p5()
+                                .child(
+                                    h_flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .flex_1()
+                                        .child(
+                                            Icon::new(chevron_name)
+                                                .text_color(theme.muted_foreground),
+                                        )
+                                        .child(Icon::new(icon_name).text_color(rgb(0xe06c1b)))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(theme.foreground)
+                                                .text_ellipsis()
+                                                .child(folder.name.clone()),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.muted_foreground)
+                                        .child(folder.items.len().to_string()),
+                                ),
+                        ),
+                ),
             )
             .when(!is_collapsed, |this| {
                 this.children(folder.items.iter().map(|child_item| {
@@ -313,45 +321,50 @@ impl Sidebar {
         let req_name = name.to_string();
         let indent = (depth as f32) * 12.0;
 
-        h_flex()
-            .w_full()
-            .items_center()
-            .justify_between()
-            .px_2()
-            .py_1p5()
-            .rounded_md()
-            .pl(px(indent + 24.))
-            .when(is_selected, |this| {
-                this.bg(rgb(0xe06c1b).opacity(0.15))
-                    .border_1()
-                    .border_color(rgb(0xe06c1b))
-            })
-            .child(
-                Button::new(format!("open-req-{}", req_id))
-                    .ghost()
-                    .label(req_name)
-                    .on_click(cx.listener({
-                        let r_id = req_id.clone();
-                        move |this, _, _, cx| {
-                            this.selected_request_id = Some(r_id.clone());
-                            cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
-                            cx.notify();
-                        }
-                    })),
-            )
-            .child(
-                Button::new(format!("sel-req-{}", req_id))
-                    .ghost()
-                    .on_click(cx.listener({
-                        let r_id = req_id.clone();
-                        move |this, _, _, cx| {
-                            this.selected_request_id = Some(r_id.clone());
-                            cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
-                            cx.notify();
-                        }
-                    }))
-                    .child(method_badge(method)),
-            )
+        h_flex().w_full().pl(px(indent + 16.)).pr_2().child(
+            Button::new(format!("open-req-{}", req_id))
+                .ghost()
+                .w_full()
+                .on_click(cx.listener({
+                    let r_id = req_id.clone();
+                    move |this, _, _, cx| {
+                        this.selected_request_id = Some(r_id.clone());
+                        cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                        cx.notify();
+                    }
+                }))
+                .child(
+                    h_flex()
+                        .w_full()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .py_0p5()
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .flex_1()
+                                .child(method_badge(method))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(if is_selected {
+                                            FontWeight::SEMIBOLD
+                                        } else {
+                                            FontWeight::NORMAL
+                                        })
+                                        .text_color(cx.theme().foreground)
+                                        .when(is_selected, |this| this.text_color(rgb(0xe06c1b)))
+                                        .text_ellipsis()
+                                        .child(req_name),
+                                ),
+                        )
+                        .when(is_selected, |this| {
+                            this.child(div().size(px(6.)).rounded_full().bg(rgb(0xe06c1b)))
+                        }),
+                ),
+        )
     }
 }
 

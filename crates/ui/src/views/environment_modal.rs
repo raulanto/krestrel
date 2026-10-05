@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use gpui::{
     AppContext, Context, Entity, EventEmitter, FontWeight, IntoElement, ParentElement as _, Render,
     Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
@@ -25,6 +27,7 @@ pub struct EnvironmentModal {
     selected_edit_index: usize,
     var_name_input: Entity<InputState>,
     var_value_input: Entity<InputState>,
+    revealed_secrets: HashSet<String>,
     is_open: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -44,6 +47,7 @@ impl EnvironmentModal {
             selected_edit_index: 0,
             var_name_input,
             var_value_input,
+            revealed_secrets: HashSet::new(),
             is_open: false,
             _subscriptions: Vec::new(),
         }
@@ -140,6 +144,15 @@ impl EnvironmentModal {
             }
             cx.notify();
         }
+    }
+
+    fn toggle_reveal_secret(&mut self, key: &str, cx: &mut Context<Self>) {
+        if self.revealed_secrets.contains(key) {
+            self.revealed_secrets.remove(key);
+        } else {
+            self.revealed_secrets.insert(key.to_string());
+        }
+        cx.notify();
     }
 
     fn delete_variable(&mut self, key: &str, cx: &mut Context<Self>) {
@@ -422,8 +435,9 @@ impl EnvironmentModal {
                                 let key_for_del = key.clone();
                                 let is_enabled = var.enabled;
                                 let is_secret = var.secret;
+                                let is_revealed = self.revealed_secrets.contains(&key);
 
-                                let display_val = if is_secret {
+                                let display_val = if is_secret && !is_revealed {
                                     "••••••••".to_string()
                                 } else {
                                     var.value
@@ -477,17 +491,45 @@ impl EnvironmentModal {
                                         h_flex()
                                             .items_center()
                                             .gap_1()
+                                            .when(is_secret, |this| {
+                                                let k_rev = key_for_secret.clone();
+                                                this.child(
+                                                    Button::new(format!("reveal-var-{}", k_rev))
+                                                        .ghost()
+                                                        .icon(Icon::new(if is_revealed {
+                                                            IconName::EyeOff
+                                                        } else {
+                                                            IconName::Eye
+                                                        }))
+                                                        .on_click(cx.listener(
+                                                            move |this, _, _, cx| {
+                                                                this.toggle_reveal_secret(
+                                                                    &k_rev, cx,
+                                                                );
+                                                            },
+                                                        )),
+                                                )
+                                            })
                                             .child(
                                                 Button::new(format!(
                                                     "secret-var-{}",
                                                     key_for_secret
                                                 ))
                                                 .ghost()
-                                                .icon(Icon::new(if is_secret {
-                                                    IconName::EyeOff
-                                                } else {
-                                                    IconName::Eye
-                                                }))
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .font_weight(FontWeight::MEDIUM)
+                                                        .text_color(theme.muted_foreground)
+                                                        .when(is_secret, |this| {
+                                                            this.text_color(rgb(0xe06c1b))
+                                                        })
+                                                        .child(if is_secret {
+                                                            "Secreto"
+                                                        } else {
+                                                            "Público"
+                                                        }),
+                                                )
                                                 .on_click(cx.listener(move |this, _, _, cx| {
                                                     this.toggle_var_secret(&key_for_secret, cx);
                                                 })),
