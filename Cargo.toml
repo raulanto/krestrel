@@ -1,6 +1,50 @@
-[package]
-name = "krestrel"
+[workspace]
+members = [
+    "crates/core",
+    "crates/storage",
+    "crates/importers",
+    "crates/http",
+    "crates/json-graph",
+    "crates/ui",
+    "crates/app",
+]
+default-members = ["crates/app"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
-[dependencies]
+[workspace.dependencies]
+# Internal workspace crates
+kestrel-core = { path = "crates/core" }
+kestrel-storage = { path = "crates/storage" }
+kestrel-importers = { path = "crates/importers" }
+kestrel-http = { path = "crates/http" }
+kestrel-json-graph = { path = "crates/json-graph" }
+kestrel-ui = { path = "crates/ui" }
+
+# GPUI and UI stack pinned to gpui-kit 0.7.1
+gpui-kit = "0.7.1"
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Async & Networking
+tokio = { version = "1.43", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls-native-roots"] }
+url = "2.5"
+
+# Errors & Diagnostics
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+indexmap = { version = "2.7", features = ["serde"] }

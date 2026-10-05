@@ -1,0 +1,17 @@
+[package]
+name = "kestrel-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kestrel-core.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+url.workspace = true
+tracing.workspace = true
+indexmap.workspace = true

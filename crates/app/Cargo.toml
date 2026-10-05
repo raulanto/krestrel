@@ -1,0 +1,23 @@
+[package]
+name = "kestrel-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "kestrel"
+path = "src/main.rs"
+
+[dependencies]
+kestrel-core.workspace = true
+kestrel-storage.workspace = true
+kestrel-importers.workspace = true
+kestrel-http.workspace = true
+kestrel-json-graph.workspace = true
+kestrel-ui.workspace = true
+
+gpui.workspace = true
+gpui-kit.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
