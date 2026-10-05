@@ -107,27 +107,20 @@ impl Render for Sidebar {
                     .border_color(theme.border)
                     .bg(theme.muted.opacity(0.12))
                     .child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .w_full()
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        Icon::new(IconName::FolderOpen)
-                                            .text_color(rgb(0xe06c1b)),
-                                    )
-                                    .child(
-                                        div()
-                                            .font_weight(FontWeight::BOLD)
-                                            .text_sm()
-                                            .text_color(theme.foreground)
-                                            .text_ellipsis()
-                                            .child(collection_name),
-                                    ),
-                            ),
+                        h_flex().items_center().justify_between().w_full().child(
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .child(Icon::new(IconName::FolderOpen).text_color(rgb(0xe06c1b)))
+                                .child(
+                                    div()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_sm()
+                                        .text_color(theme.foreground)
+                                        .text_ellipsis()
+                                        .child(collection_name),
+                                ),
+                        ),
                     )
                     .child(
                         Input::new(&self.search_input)
@@ -163,9 +156,11 @@ impl Sidebar {
             v_flex()
                 .gap_1()
                 .w_full()
-                .children(col.items.iter().map(|item| {
-                    self.render_collection_item(item, 0, cx).into_any_element()
-                }))
+                .children(
+                    col.items
+                        .iter()
+                        .map(|item| self.render_collection_item(item, 0, cx).into_any_element()),
+                )
                 .into_any_element()
         } else {
             // Render filtered search results
@@ -184,24 +179,30 @@ impl Sidebar {
                     .w_full()
                     .children(filtered.into_iter().map(|f_item| {
                         match f_item.kind {
-                            super::search::FilteredItemKind::Folder => {
-                                h_flex()
-                                    .px_2()
-                                    .py_1p5()
-                                    .gap_2()
-                                    .items_center()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(Icon::new(IconName::Folder))
-                                    .child(f_item.name)
-                                    .into_any_element()
-                            }
+                            super::search::FilteredItemKind::Folder => h_flex()
+                                .px_2()
+                                .py_1p5()
+                                .gap_2()
+                                .items_center()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(Icon::new(IconName::Folder))
+                                .child(f_item.name)
+                                .into_any_element(),
                             super::search::FilteredItemKind::Request(method) => {
                                 let req_id = f_item.id.clone();
-                                let is_selected = self.selected_request_id.as_deref() == Some(&f_item.id);
+                                let is_selected =
+                                    self.selected_request_id.as_deref() == Some(&f_item.id);
 
-                                self.render_request_row(&f_item.name, &req_id, method, is_selected, 0, cx)
-                                    .into_any_element()
+                                self.render_request_row(
+                                    &f_item.name,
+                                    &req_id,
+                                    method,
+                                    is_selected,
+                                    0,
+                                    cx,
+                                )
+                                .into_any_element()
                             }
                         }
                     }))
@@ -210,17 +211,30 @@ impl Sidebar {
         }
     }
 
-    fn render_collection_item(&self, item: &CollectionItem, depth: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_collection_item(
+        &self,
+        item: &CollectionItem,
+        depth: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         match item {
-            CollectionItem::Folder(folder) => self.render_folder_row(folder, depth, cx).into_any_element(),
+            CollectionItem::Folder(folder) => {
+                self.render_folder_row(folder, depth, cx).into_any_element()
+            }
             CollectionItem::Request(req) => {
                 let is_selected = self.selected_request_id.as_deref() == Some(&req.id);
-                self.render_request_row(&req.name, &req.id, req.method, is_selected, depth, cx).into_any_element()
+                self.render_request_row(&req.name, &req.id, req.method, is_selected, depth, cx)
+                    .into_any_element()
             }
         }
     }
 
-    fn render_folder_row(&self, folder: &Folder, depth: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_folder_row(
+        &self,
+        folder: &Folder,
+        depth: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let theme = cx.theme();
         let is_collapsed = self.collapsed_folders.contains(&folder.id);
         let folder_id = folder.id.clone();
@@ -280,7 +294,8 @@ impl Sidebar {
             )
             .when(!is_collapsed, |this| {
                 this.children(folder.items.iter().map(|child_item| {
-                    self.render_collection_item(child_item, depth + 1, cx).into_any_element()
+                    self.render_collection_item(child_item, depth + 1, cx)
+                        .into_any_element()
                 }))
             })
     }

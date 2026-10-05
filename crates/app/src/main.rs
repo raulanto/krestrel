@@ -321,28 +321,30 @@ impl Render for KestrelWorkspace {
 }
 
 fn main() -> Result<()> {
-    gpui_kit::application().run(|cx| {
-        gpui_kit::init(cx);
+    gpui_kit::application()
+        .with_assets(gpui_kit::assets::Assets)
+        .run(|cx| {
+            gpui_kit::init(cx);
 
-        let window_bounds = Bounds {
-            origin: point(px(80.0), px(80.0)),
-            size: size(px(1240.0), px(800.0)),
-        };
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-            titlebar: Some(gpui::TitlebarOptions {
-                title: Some("Kestrel".into()),
-                appears_transparent: false,
-                traffic_light_position: None,
-            }),
-            ..Default::default()
-        };
+            let window_bounds = Bounds {
+                origin: point(px(80.0), px(80.0)),
+                size: size(px(1240.0), px(800.0)),
+            };
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+                titlebar: Some(gpui::TitlebarOptions {
+                    title: Some("Kestrel".into()),
+                    appears_transparent: false,
+                    traffic_light_position: None,
+                }),
+                ..Default::default()
+            };
 
-        gpui_kit::open_window(options, cx, |window, cx| {
-            cx.new(|cx| KestrelWorkspace::new(window, cx))
-        })
-        .expect("Error al abrir ventana principal");
-    });
+            gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| KestrelWorkspace::new(window, cx))
+            })
+            .expect("Error al abrir ventana principal");
+        });
 
     Ok(())
 }
