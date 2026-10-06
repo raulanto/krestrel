@@ -122,7 +122,7 @@ kestrel/
 - [x] Cliente HTTP y GraphQL
 - [x] Panel de respuesta (Pretty / Raw / Headers)
 - [x] Inteligencia de respuesta (JWT, timestamps)
-- [ ] Importadores Postman y Yaak
+- [x] Importadores Postman y Yaak
 - [ ] Visualizador de JSON en diagrama
 - [ ] Exportar diagrama a PNG/SVG
 
