@@ -8,3 +8,4 @@ license.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+resvg = { version = "0.48", default-features = false, features = ["raster-images", "text"] }

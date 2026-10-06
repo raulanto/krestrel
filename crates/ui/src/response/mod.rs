@@ -1,3 +1,4 @@
+pub mod diagram;
 pub mod headers_view;
 pub mod highlight;
 pub mod panel;
@@ -7,6 +8,7 @@ pub mod states;
 pub mod status_bar;
 pub mod tree_table_view;
 
+pub use diagram::*;
 pub use headers_view::*;
 pub use highlight::*;
 pub use panel::*;

@@ -17,6 +17,7 @@ use kestrel_http::{
     format_pretty_xml,
 };
 
+use super::diagram::DiagramView;
 use super::headers_view::HeadersView;
 use super::raw_view::RawView;
 use super::states::{EmptyBodyState, FailedState, IdleState, LoadingState};
@@ -31,6 +32,7 @@ pub enum ResponseTab {
     Pretty,
     Raw,
     Table,
+    Diagram,
     Headers,
     Insights,
 }
@@ -49,6 +51,7 @@ pub struct ResponsePanel {
     is_word_wrap: bool,
     force_format_large: bool,
     code_editor: Entity<CodeEditor>,
+    diagram_view: Entity<DiagramView>,
     find_input: Entity<TextInput>,
     find_options: FindOptions,
     find_matches: Vec<std::ops::Range<usize>>,
@@ -68,6 +71,8 @@ impl ResponsePanel {
                 .line_numbers(LineNumbers::Absolute)
                 .read_only()
         });
+
+        let diagram_view = cx.new(|cx| DiagramView::new("", window, cx));
 
         let find_input = cx.new(|cx| TextInput::new(window, cx).placeholder("Buscar..."));
 
@@ -89,6 +94,7 @@ impl ResponsePanel {
             is_word_wrap: false,
             force_format_large: false,
             code_editor,
+            diagram_view,
             find_input,
             find_options: FindOptions::default(),
             find_matches: Vec::new(),
@@ -113,12 +119,15 @@ impl ResponsePanel {
     }
 
     pub fn set_response(&mut self, resp: HttpResponse, cx: &mut Context<Self>) {
-        let body_str = String::from_utf8_lossy(&resp.body);
-        let insights = self.intelligence.analyze(&body_str);
+        let (decoded, _lossy) = decode_body(&resp.body, resp.content_type.as_deref());
+        let insights = self.intelligence.analyze(&decoded);
 
         self.insights = insights;
         self.state = ResponseState::Done(Arc::new(resp));
         self.force_format_large = false;
+        self.diagram_view.update(cx, |diag, cx| {
+            diag.set_json(&decoded, cx);
+        });
         self.update_editor_text(cx);
         cx.notify();
     }
@@ -363,6 +372,20 @@ impl Render for ResponsePanel {
                                     .size(ControlSize::Sm)
                                     .on_click(cx.listener(|this, _, _window, cx| {
                                         this.active_tab = ResponseTab::Table;
+                                        cx.notify();
+                                    })),
+                            )
+                            // Diagram Tab
+                            .child(
+                                Button::new("tab-diagram", "Diagrama")
+                                    .variant(if active_tab == ResponseTab::Diagram {
+                                        ButtonVariant::Secondary
+                                    } else {
+                                        ButtonVariant::Ghost
+                                    })
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        this.active_tab = ResponseTab::Diagram;
                                         cx.notify();
                                     })),
                             )
@@ -647,6 +670,7 @@ impl ResponsePanel {
                             decode_body(&resp.body, resp.content_type.as_deref());
                         TreeTableView::new(&decoded).into_any_element()
                     }
+                    ResponseTab::Diagram => self.diagram_view.clone().into_any_element(),
                     ResponseTab::Headers => HeadersView::new(
                         resp.headers.clone(),
                         resp.url_final.clone(),
