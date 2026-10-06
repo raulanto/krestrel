@@ -72,6 +72,7 @@ pub fn filter_collection_items(
                     });
                 }
             }
+            CollectionItem::ErrorNode(_) => {}
         }
     }
 
@@ -98,6 +99,7 @@ mod tests {
                     id: "f-1".into(),
                     name: "Auth".into(),
                     description: None,
+                    seq: None,
                     items: vec![CollectionItem::Request(Request {
                         id: "r-1".into(),
                         name: "Login".into(),
@@ -108,8 +110,13 @@ mod tests {
                         auth: Default::default(),
                         body: Default::default(),
                         description: None,
+                        seq: None,
+                        path: None,
+                        dirty: false,
                         extra: Default::default(),
                     })],
+                    path: None,
+                    dirty: false,
                     extra: Default::default(),
                 }),
                 CollectionItem::Request(Request {
@@ -122,10 +129,16 @@ mod tests {
                     auth: Default::default(),
                     body: Default::default(),
                     description: None,
+                    seq: None,
+                    path: None,
+                    dirty: false,
                     extra: Default::default(),
                 }),
             ],
             environments: vec![],
+            path: None,
+            is_bundled: true,
+            dirty: false,
             extra: Default::default(),
         };
 
@@ -147,6 +160,7 @@ mod tests {
                     id: "f-1".into(),
                     name: "Auth".into(),
                     description: None,
+                    seq: None,
                     items: vec![CollectionItem::Request(Request {
                         id: "r-1".into(),
                         name: "Login".into(),
@@ -157,8 +171,13 @@ mod tests {
                         auth: Default::default(),
                         body: Default::default(),
                         description: None,
+                        seq: None,
+                        path: None,
+                        dirty: false,
                         extra: Default::default(),
                     })],
+                    path: None,
+                    dirty: false,
                     extra: Default::default(),
                 }),
                 CollectionItem::Request(Request {
@@ -171,10 +190,16 @@ mod tests {
                     auth: Default::default(),
                     body: Default::default(),
                     description: None,
+                    seq: None,
+                    path: None,
+                    dirty: false,
                     extra: Default::default(),
                 }),
             ],
             environments: vec![],
+            path: None,
+            is_bundled: true,
+            dirty: false,
             extra: Default::default(),
         };
 

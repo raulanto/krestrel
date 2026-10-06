@@ -84,6 +84,8 @@ fn is_false(b: &bool) -> bool {
 pub struct ItemDoc {
     pub info: ItemInfoDoc,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub http: Option<HttpDetailsDoc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graphql: Option<GraphqlDetailsDoc>,

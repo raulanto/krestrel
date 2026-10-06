@@ -4,12 +4,16 @@ use serde::{Deserialize, Serialize};
 use crate::auth::Auth;
 use crate::body::Body;
 
+use std::path::PathBuf;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     pub id: String,
     pub name: String,
     pub method: HttpMethod,
     pub url: String,
+    #[serde(default)]
+    pub seq: Option<usize>,
     #[serde(default)]
     pub headers: Vec<HeaderParam>,
     #[serde(default)]
@@ -20,6 +24,10 @@ pub struct Request {
     pub body: Body,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub path: Option<PathBuf>,
+    #[serde(default)]
+    pub dirty: bool,
     #[serde(default, flatten)]
     pub extra: IndexMap<String, serde_json::Value>,
 }

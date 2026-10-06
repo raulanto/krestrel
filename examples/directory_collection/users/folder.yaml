@@ -1,0 +1,5 @@
+info:
+  name: Users
+  type: folder
+  description: User management endpoints
+seq: 1

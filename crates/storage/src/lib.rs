@@ -1,10 +1,18 @@
 //! OpenCollection YAML serialization and storage persistence.
 
 pub mod converter;
+pub mod directory;
+pub mod local_state;
 pub mod schema;
+pub mod secrets;
+pub mod watcher;
 
 pub use converter::*;
+pub use directory::*;
+pub use local_state::*;
 pub use schema::*;
+pub use secrets::*;
+pub use watcher::*;
 
 use kestrel_core::Collection;
 use std::path::Path;
@@ -16,6 +24,8 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("Error al procesar YAML: {0}")]
     Yaml(#[from] serde_yaml_ng::Error),
+    #[error("Notificación de observador: {0}")]
+    Notify(#[from] notify::Error),
 }
 
 /// Reads OpenCollection YAML into the domain model `Collection`.
@@ -31,24 +41,46 @@ pub fn write_collection_to_yaml(collection: &Collection) -> Result<String, Stora
     Ok(yaml)
 }
 
-/// Loads a collection from a YAML file on disk.
-pub fn load_collection_file(path: impl AsRef<Path>) -> Result<Collection, StorageError> {
-    let content = std::fs::read_to_string(path)?;
-    read_collection_from_yaml(&content)
+/// Loads a collection from a path (file or directory) on disk.
+pub fn load_collection_path(path: impl AsRef<Path>) -> Result<Collection, StorageError> {
+    let p = path.as_ref();
+    if p.is_dir() {
+        load_collection_from_dir(p)
+    } else {
+        let content = std::fs::read_to_string(p)?;
+        let mut col = read_collection_from_yaml(&content)?;
+        col.path = Some(p.to_path_buf());
+        col.is_bundled = true;
+        Ok(col)
+    }
 }
 
-/// Saves a collection to a YAML file on disk atomically.
+/// Legacy alias for single file loading.
+pub fn load_collection_file(path: impl AsRef<Path>) -> Result<Collection, StorageError> {
+    load_collection_path(path)
+}
+
+/// Saves a collection to disk atomically (file or directory).
+pub fn save_collection_path(
+    path: impl AsRef<Path>,
+    collection: &Collection,
+) -> Result<(), StorageError> {
+    let p = path.as_ref();
+    if collection.is_bundled || p.is_file() {
+        let yaml = write_collection_to_yaml(collection)?;
+        atomic_write_file(p, &yaml)?;
+        Ok(())
+    } else {
+        save_collection_to_dir(p, collection, false)
+    }
+}
+
+/// Legacy alias for single file saving.
 pub fn save_collection_file(
     path: impl AsRef<Path>,
     collection: &Collection,
 ) -> Result<(), StorageError> {
-    let yaml = write_collection_to_yaml(collection)?;
-    let p = path.as_ref();
-    // Atomic write by writing to a temp file next to target then rename
-    let tmp_path = p.with_extension("tmp");
-    std::fs::write(&tmp_path, yaml)?;
-    std::fs::rename(tmp_path, p)?;
-    Ok(())
+    save_collection_path(path, collection)
 }
 
 /// OpenCollection YAML implementation of the `CollectionRepository` port.
@@ -66,7 +98,7 @@ impl kestrel_core::CollectionRepository for OpenCollectionStorage {
         &self,
         path: &Path,
     ) -> Result<Collection, kestrel_core::CollectionRepositoryError> {
-        load_collection_file(path)
+        load_collection_path(path)
             .map_err(|e| kestrel_core::CollectionRepositoryError::Storage(e.to_string()))
     }
 
@@ -75,7 +107,7 @@ impl kestrel_core::CollectionRepository for OpenCollectionStorage {
         path: &Path,
         collection: &Collection,
     ) -> Result<(), kestrel_core::CollectionRepositoryError> {
-        save_collection_file(path, collection)
+        save_collection_path(path, collection)
             .map_err(|e| kestrel_core::CollectionRepositoryError::Storage(e.to_string()))
     }
 }

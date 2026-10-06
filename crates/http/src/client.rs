@@ -297,6 +297,9 @@ mod tests {
             auth: Auth::None,
             body: Body::None,
             description: None,
+            seq: None,
+            path: None,
+            dirty: false,
             extra: indexmap::IndexMap::new(),
         };
 

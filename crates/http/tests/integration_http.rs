@@ -104,6 +104,9 @@ async fn test_mock_server_http_get_with_query_and_auth() {
         },
         body: Body::None,
         description: None,
+        seq: None,
+        path: None,
+        dirty: false,
         extra: indexmap::IndexMap::new(),
     };
 
@@ -142,6 +145,9 @@ async fn test_mock_server_graphql_post() {
             variables: Some(r#"{"id": "42"}"#.to_string()),
         },
         description: None,
+        seq: None,
+        path: None,
+        dirty: false,
         extra: indexmap::IndexMap::new(),
     };
 

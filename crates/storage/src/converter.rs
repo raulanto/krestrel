@@ -74,6 +74,9 @@ pub fn doc_to_collection(doc: OpenCollectionDocument) -> Collection {
         description: doc.info.summary.or(doc.info.description),
         items,
         environments,
+        path: None,
+        is_bundled: doc.bundled,
+        dirty: false,
         extra,
     }
 }
@@ -156,6 +159,7 @@ pub fn collection_to_doc(collection: &Collection) -> OpenCollectionDocument {
 
 fn doc_item_to_collection_item(item: ItemDoc) -> CollectionItem {
     let item_type = item.info.item_type.to_lowercase();
+    let seq = item.seq;
     if item_type == "folder" {
         let sub_items = item
             .items
@@ -174,7 +178,10 @@ fn doc_item_to_collection_item(item: ItemDoc) -> CollectionItem {
             id: Uuid::new_v4().to_string(),
             name: item.info.name,
             description: item.info.description,
+            seq,
             items: sub_items,
+            path: None,
+            dirty: false,
             extra,
         })
     } else {
@@ -248,17 +255,20 @@ fn doc_item_to_collection_item(item: ItemDoc) -> CollectionItem {
             name: item.info.name,
             method,
             url,
+            seq,
             headers,
             params,
             auth,
             body,
             description: item.info.description,
+            path: None,
+            dirty: false,
             extra,
         })
     }
 }
 
-fn collection_item_to_doc_item(item: &CollectionItem) -> ItemDoc {
+pub fn collection_item_to_doc_item(item: &CollectionItem) -> ItemDoc {
     match item {
         CollectionItem::Folder(folder) => {
             let sub_items = folder
@@ -279,6 +289,7 @@ fn collection_item_to_doc_item(item: &CollectionItem) -> ItemDoc {
                     description: folder.description.clone(),
                     extra: IndexMap::new(),
                 },
+                seq: folder.seq,
                 http: None,
                 graphql: None,
                 items: sub_items,
@@ -355,12 +366,31 @@ fn collection_item_to_doc_item(item: &CollectionItem) -> ItemDoc {
                     description: req.description.clone(),
                     extra: IndexMap::new(),
                 },
+                seq: req.seq,
                 http,
                 graphql,
                 items: Vec::new(),
                 extra,
             }
         }
+        CollectionItem::ErrorNode(err_node) => ItemDoc {
+            info: ItemInfoDoc {
+                name: err_node.name.clone(),
+                item_type: "error".to_string(),
+                description: Some(format!(
+                    "Error: {} (line {}, col {})",
+                    err_node.error_message,
+                    err_node.line.unwrap_or(0),
+                    err_node.column.unwrap_or(0)
+                )),
+                extra: IndexMap::new(),
+            },
+            seq: None,
+            http: None,
+            graphql: None,
+            items: Vec::new(),
+            extra: IndexMap::new(),
+        },
     }
 }
 

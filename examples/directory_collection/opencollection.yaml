@@ -1,0 +1,14 @@
+opencollection: 1.0.0
+info:
+  name: Directory API Spec
+  summary: Multi-file directory collection fixture
+  version: 1.0.0
+bundled: false
+config:
+  environments:
+    - name: Development
+      variables:
+        - name: baseUrl
+          value: https://api.example.com
+        - name: apiKey
+          secret: true

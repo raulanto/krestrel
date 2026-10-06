@@ -14,6 +14,9 @@ impl Importer for YaakImporter {
             description: None,
             items: vec![],
             environments: vec![],
+            path: None,
+            is_bundled: false,
+            dirty: false,
             extra: Default::default(),
         })
     }

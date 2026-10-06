@@ -161,7 +161,6 @@ impl KestrelWorkspace {
             _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env],
         };
 
-        // Open first request from collection if available
         let first_req = workspace.sidebar.read(cx).collection().and_then(|col| {
             fn find_first(items: &[kestrel_core::CollectionItem]) -> Option<String> {
                 for item in items {
@@ -172,6 +171,7 @@ impl KestrelWorkspace {
                                 return Some(id);
                             }
                         }
+                        kestrel_core::CollectionItem::ErrorNode(_) => {}
                     }
                 }
                 None
@@ -368,8 +368,10 @@ impl KestrelWorkspace {
                                 return Some(id);
                             }
                         }
+                        kestrel_core::CollectionItem::ErrorNode(_) => {}
                     }
                 }
+
                 None
             }
 

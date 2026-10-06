@@ -17,6 +17,9 @@ impl Importer for PostmanImporter {
             description: val["info"]["description"].as_str().map(|s| s.to_string()),
             items: vec![],
             environments: vec![],
+            path: None,
+            is_bundled: false,
+            dirty: false,
             extra: Default::default(),
         })
     }

@@ -394,6 +394,28 @@ impl Sidebar {
                 self.render_request_row(&req.name, &req.id, req.method, is_selected, depth, cx)
                     .into_any_element()
             }
+            CollectionItem::ErrorNode(err) => {
+                let indent = (depth as f32) * 12.0;
+
+                let title = format!(
+                    "⚠️ {} (L{}:C{}) - {}",
+                    err.name,
+                    err.line.unwrap_or(0),
+                    err.column.unwrap_or(0),
+                    err.error_message
+                );
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_2()
+                    .py_1()
+                    .pl(gpui::px(indent + 8.0))
+                    .text_xs()
+                    .text_color(gpui::rgb(0xef4444))
+                    .child(title)
+                    .into_any_element()
+            }
         }
     }
 
