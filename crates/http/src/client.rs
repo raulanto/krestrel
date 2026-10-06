@@ -215,27 +215,43 @@ impl HttpClient {
 
         // 7. Send Request & Measure Metrics
         let resp = req_builder.send().await?;
-        let duration = start.elapsed();
+        let url_final = resp.url().to_string();
+        let http_version = format!("{:?}", resp.version());
         let status = resp.status().as_u16();
         let status_text = resp.status().canonical_reason().unwrap_or("").to_string();
 
-        let mut headers = indexmap::IndexMap::new();
+        let mut headers = Vec::new();
+        let mut headers_bytes = 0;
+        let mut content_type = None;
+
         for (name, val) in resp.headers() {
             if let Ok(str_val) = val.to_str() {
-                headers.insert(name.as_str().to_string(), str_val.to_string());
+                if name.as_str().eq_ignore_ascii_case("content-type") {
+                    content_type = Some(str_val.to_string());
+                }
+                headers_bytes += name.as_str().len() + str_val.len() + 4;
+                headers.push((name.as_str().to_string(), str_val.to_string()));
             }
         }
 
-        let body_bytes = resp.bytes().await?.to_vec();
-        let size_bytes = body_bytes.len();
+        let body_bytes = resp.bytes().await?;
+        let duration = start.elapsed();
+        let body_len = body_bytes.len();
 
         Ok(HttpResponse {
             status,
             status_text,
             headers,
             body: body_bytes,
-            duration,
-            size_bytes,
+            content_type,
+            timing: crate::response::Timing { total: duration },
+            size: crate::response::Sizes {
+                headers_bytes,
+                body_bytes: body_len,
+                decompressed_bytes: Some(body_len),
+            },
+            http_version,
+            url_final,
         })
     }
 }

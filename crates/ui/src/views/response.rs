@@ -89,11 +89,18 @@ impl Render for ResponsePanel {
             match &self.response {
                 Some(resp) => {
                     let status_text = format!("{} {}", resp.status, resp.status_text);
-                    let duration_text = format!("{:.2} ms", resp.duration.as_secs_f64() * 1000.0);
-                    let size_text = if resp.size_bytes < 1024 {
-                        format!("{} B", resp.size_bytes)
+                    let duration_ms = resp.timing.total.as_secs_f64() * 1000.0;
+                    let duration_text = if duration_ms >= 1000.0 {
+                        format!("{:.2} s", duration_ms / 1000.0)
                     } else {
-                        format!("{:.1} KB", resp.size_bytes as f64 / 1024.0)
+                        format!("{:.2} ms", duration_ms)
+                    };
+                    let size_text = if resp.size.body_bytes < 1024 {
+                        format!("{} B", resp.size.body_bytes)
+                    } else if resp.size.body_bytes < 1024 * 1024 {
+                        format!("{:.1} KB", resp.size.body_bytes as f64 / 1024.0)
+                    } else {
+                        format!("{:.2} MB", resp.size.body_bytes as f64 / (1024.0 * 1024.0))
                     };
 
                     let is_ok = resp.status >= 200 && resp.status < 400;
