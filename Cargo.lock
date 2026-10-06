@@ -3611,6 +3611,7 @@ dependencies = [
 name = "kestrel-ui"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "gpui-kit",
  "gpui-pre",
  "kestrel-core",

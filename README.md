@@ -89,7 +89,7 @@ kestrel/
 - [x] Entornos y variables
 - [x] Cliente HTTP y GraphQL
 - [x] Panel de respuesta (Pretty / Raw / Headers)
-- [ ] Inteligencia de respuesta (JWT, timestamps)
+- [x] Inteligencia de respuesta (JWT, timestamps)
 - [ ] Importadores Postman y Yaak
 - [ ] Visualizador de JSON en diagrama
 - [ ] Exportar diagrama a PNG/SVG

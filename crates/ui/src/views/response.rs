@@ -9,30 +9,36 @@ use gpui_kit::component::{
     scroll::ScrollableElement as _,
     v_flex,
 };
-use kestrel_http::HttpResponse;
+use kestrel_http::{
+    HttpResponse, Insight, InsightKind, JwtStatus, ResponseIntelligence, TimestampUnit,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponseTab {
     Pretty,
     Raw,
     Headers,
-    Inspect,
+    Insights,
 }
 
 pub struct ResponsePanel {
     response: Option<HttpResponse>,
+    insights: Vec<Insight>,
     active_tab: ResponseTab,
     is_loading: bool,
     error: Option<String>,
+    intelligence: ResponseIntelligence,
 }
 
 impl ResponsePanel {
     pub fn new() -> Self {
         Self {
             response: None,
+            insights: Vec::new(),
             active_tab: ResponseTab::Pretty,
             is_loading: false,
             error: None,
+            intelligence: ResponseIntelligence::new(),
         }
     }
 
@@ -45,7 +51,11 @@ impl ResponsePanel {
     }
 
     pub fn set_response(&mut self, resp: HttpResponse, cx: &mut Context<Self>) {
+        let body_str = String::from_utf8_lossy(&resp.body);
+        let insights = self.intelligence.analyze(&body_str);
+
         self.response = Some(resp);
+        self.insights = insights;
         self.is_loading = false;
         self.error = None;
         cx.notify();
@@ -68,23 +78,17 @@ impl Render for ResponsePanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let active_tab = self.active_tab;
+        let insights_count = self.insights.len();
 
-        let (status_str, time_str, size_str, is_success, body_preview) = if self.is_loading {
+        let (status_str, time_str, size_str, is_success) = if self.is_loading {
             (
                 "Enviando...".to_string(),
                 "...".to_string(),
                 "-".to_string(),
                 true,
-                "Ejecutando solicitud en segundo plano...".to_string(),
             )
-        } else if let Some(err) = &self.error {
-            (
-                "Error".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                false,
-                format!("Error al ejecutar la solicitud:\n\n{}", err),
-            )
+        } else if let Some(_err) = &self.error {
+            ("Error".to_string(), "-".to_string(), "-".to_string(), false)
         } else {
             match &self.response {
                 Some(resp) => {
@@ -104,43 +108,13 @@ impl Render for ResponsePanel {
                     };
 
                     let is_ok = resp.status >= 200 && resp.status < 400;
-
-                    let body_str = match active_tab {
-                        ResponseTab::Pretty => {
-                            if let Ok(json_val) =
-                                serde_json::from_slice::<serde_json::Value>(&resp.body)
-                            {
-                                serde_json::to_string_pretty(&json_val).unwrap_or_else(|_| {
-                                    String::from_utf8_lossy(&resp.body).to_string()
-                                })
-                            } else {
-                                String::from_utf8_lossy(&resp.body).to_string()
-                            }
-                        }
-                        ResponseTab::Raw => String::from_utf8_lossy(&resp.body).to_string(),
-                        ResponseTab::Headers => resp
-                            .headers
-                            .iter()
-                            .map(|(k, v)| format!("{}: {}", k, v))
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                        ResponseTab::Inspect => format!(
-                            "Estado: {}\nTiempo: {}\nTamaño: {}\nHeaders: {}",
-                            status_text,
-                            duration_text,
-                            size_text,
-                            resp.headers.len()
-                        ),
-                    };
-
-                    (status_text, duration_text, size_text, is_ok, body_str)
+                    (status_text, duration_text, size_text, is_ok)
                 }
                 None => (
                     "Sin respuesta".to_string(),
                     "-".to_string(),
                     "-".to_string(),
                     true,
-                    "Envía una solicitud para ver la respuesta aquí...".to_string(),
                 ),
             }
         };
@@ -149,7 +123,7 @@ impl Render for ResponsePanel {
             .size_full()
             .p_4()
             .gap_3()
-            // Top Response Header: Title + Status Badge + Time + Size
+            // Header Bar
             .child(
                 h_flex()
                     .items_center()
@@ -197,7 +171,7 @@ impl Render for ResponsePanel {
                             .child(div().text_color(theme.muted_foreground).child(size_str)),
                     ),
             )
-            // Tabs: Pretty, Raw, Headers, Inspect
+            // Tab Buttons
             .child(
                 h_flex()
                     .gap_2()
@@ -231,16 +205,16 @@ impl Render for ResponsePanel {
                         }),
                     ))
                     .child(render_tab_button(
-                        "tab-inspect",
-                        "Inspect",
-                        active_tab == ResponseTab::Inspect,
+                        "tab-insights",
+                        &format!("Intelligence ({})", insights_count),
+                        active_tab == ResponseTab::Insights,
                         cx.listener(|this, _, _, cx| {
-                            this.active_tab = ResponseTab::Inspect;
+                            this.active_tab = ResponseTab::Insights;
                             cx.notify();
                         }),
                     )),
             )
-            // Response Viewer Canvas
+            // Body View Canvas
             .child(
                 div()
                     .flex_1()
@@ -250,11 +224,222 @@ impl Render for ResponsePanel {
                     .bg(theme.background)
                     .p_3()
                     .overflow_y_scrollbar()
+                    .child(self.render_content_canvas(cx)),
+            )
+    }
+}
+
+impl ResponsePanel {
+    fn render_content_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+
+        if self.is_loading {
+            return div()
+                .font_family("monospace")
+                .text_xs()
+                .text_color(theme.muted_foreground)
+                .child("Ejecutando solicitud en segundo plano...")
+                .into_any_element();
+        }
+
+        if let Some(err) = &self.error {
+            return div()
+                .font_family("monospace")
+                .text_xs()
+                .text_color(rgb(0xef4444))
+                .child(format!("Error al ejecutar la solicitud:\n\n{}", err))
+                .into_any_element();
+        }
+
+        let Some(resp) = &self.response else {
+            return div()
+                .font_family("monospace")
+                .text_xs()
+                .text_color(theme.muted_foreground)
+                .child("Envía una solicitud para ver la respuesta aquí...")
+                .into_any_element();
+        };
+
+        match self.active_tab {
+            ResponseTab::Pretty => {
+                let text =
+                    if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&resp.body) {
+                        serde_json::to_string_pretty(&json_val)
+                            .unwrap_or_else(|_| String::from_utf8_lossy(&resp.body).to_string())
+                    } else {
+                        String::from_utf8_lossy(&resp.body).to_string()
+                    };
+                div()
                     .font_family("monospace")
                     .text_xs()
                     .text_color(theme.foreground)
-                    .child(body_preview),
-            )
+                    .child(text)
+                    .into_any_element()
+            }
+            ResponseTab::Raw => div()
+                .font_family("monospace")
+                .text_xs()
+                .text_color(theme.foreground)
+                .child(String::from_utf8_lossy(&resp.body).to_string())
+                .into_any_element(),
+            ResponseTab::Headers => v_flex()
+                .gap_1()
+                .children(resp.headers.iter().map(|(k, v)| {
+                    h_flex()
+                        .gap_2()
+                        .text_xs()
+                        .font_family("monospace")
+                        .child(
+                            div()
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(theme.foreground)
+                                .child(format!("{}:", k)),
+                        )
+                        .child(div().text_color(theme.muted_foreground).child(v.clone()))
+                }))
+                .into_any_element(),
+            ResponseTab::Insights => {
+                if self.insights.is_empty() {
+                    return div()
+                        .text_xs()
+                        .text_color(theme.muted_foreground)
+                        .child("No se detectaron hallazgos (JWT o Timestamps) en el cuerpo de la respuesta.")
+                        .into_any_element();
+                }
+
+                v_flex()
+                    .gap_3()
+                    .children(self.insights.iter().enumerate().map(|(ix, insight)| {
+                        match &insight.kind {
+                            InsightKind::Jwt(jwt) => {
+                                let status_str = match jwt.status {
+                                    JwtStatus::Valid => ("Válido", rgb(0x10b981)),
+                                    JwtStatus::Expired => ("Expirado", rgb(0xef4444)),
+                                    JwtStatus::NotYetValid => ("Aún no válido", rgb(0xf59e0b)),
+                                    JwtStatus::NoExpiration => ("Sin expiración", rgb(0x6b7280)),
+                                    JwtStatus::AlgNone => {
+                                        ("Algoritmo none (Inseguro)", rgb(0xef4444))
+                                    }
+                                };
+
+                                v_flex()
+                                    .p_3()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .bg(theme.muted.opacity(0.15))
+                                    .gap_2()
+                                    .child(
+                                        h_flex().justify_between().items_center().child(
+                                            h_flex()
+                                                .gap_2()
+                                                .child(
+                                                    div()
+                                                        .font_weight(FontWeight::BOLD)
+                                                        .text_xs()
+                                                        .text_color(rgb(0x3b82f6))
+                                                        .child(format!("#{} Token JWT", ix + 1)),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .px_1p5()
+                                                        .py_0p5()
+                                                        .rounded_xs()
+                                                        .text_xs()
+                                                        .font_weight(FontWeight::BOLD)
+                                                        .bg(status_str.1)
+                                                        .text_color(rgb(0xffffff))
+                                                        .child(status_str.0),
+                                                ),
+                                        ),
+                                    )
+                                    .child(
+                                        v_flex()
+                                            .gap_1()
+                                            .font_family("monospace")
+                                            .text_xs()
+                                            .child(div().text_color(theme.muted_foreground).child(
+                                                format!(
+                                                        "Header: {}",
+                                                        serde_json::to_string(&jwt.header)
+                                                            .unwrap_or_default()
+                                                    ),
+                                            ))
+                                            .child(div().text_color(theme.foreground).child(
+                                                format!(
+                                                    "Payload: {}",
+                                                    serde_json::to_string(&jwt.payload)
+                                                        .unwrap_or_default()
+                                                ),
+                                            ))
+                                            .when_some(jwt.exp, |this, exp| {
+                                                this.child(
+                                                    div().text_color(theme.muted_foreground).child(
+                                                        format!(
+                                                            "Exp (UTC): {}",
+                                                            chrono::DateTime::from_timestamp(
+                                                                exp, 0
+                                                            )
+                                                            .map(|dt| dt.to_string())
+                                                            .unwrap_or_default()
+                                                        ),
+                                                    ),
+                                                )
+                                            }),
+                                    )
+                                    .into_any_element()
+                            }
+                            InsightKind::Timestamp(ts) => {
+                                let unit_str = match ts.unit {
+                                    TimestampUnit::Seconds => "segundos",
+                                    TimestampUnit::Milliseconds => "milisegundos",
+                                    TimestampUnit::Microseconds => "microsegundos",
+                                    TimestampUnit::Nanoseconds => "nanosegundos",
+                                };
+
+                                v_flex()
+                                    .p_3()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(theme.border)
+                                    .bg(theme.muted.opacity(0.15))
+                                    .gap_1()
+                                    .child(
+                                        h_flex()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .font_weight(FontWeight::BOLD)
+                                                    .text_xs()
+                                                    .text_color(rgb(0x8b5cf6))
+                                                    .child(format!(
+                                                        "#{} Timestamp Unix ({})",
+                                                        ix + 1,
+                                                        unit_str
+                                                    )),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .font_family("monospace")
+                                                    .text_color(theme.foreground)
+                                                    .child(ts.raw.clone()),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .font_family("monospace")
+                                            .text_xs()
+                                            .text_color(theme.muted_foreground)
+                                            .child(format!("Fecha legible: {}", ts.formatted_utc)),
+                                    )
+                                    .into_any_element()
+                            }
+                        }
+                    }))
+                    .into_any_element()
+            }
+        }
     }
 }
 
