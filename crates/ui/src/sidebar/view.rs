@@ -2,16 +2,13 @@
 
 use crate::sidebar::row::SidebarRow;
 use crate::sidebar::tree_state::{FlatNodeKind, FlatTreeNode, TreeState};
+use crate::theme::{ThemeExt as _, v_flex};
+use ely_gpui_component::buttons::{Button, ButtonVariant};
+use ely_gpui_component::forms::{Input, InputEvent, TextInput};
+use ely_gpui_component::primitives::{Icon, IconName};
 use gpui::{
-    AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
-    IntoElement, KeyDownEvent, ParentElement as _, Render, Styled as _, Subscription, Window, div,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement as _,
-    v_flex,
+    AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, KeyDownEvent, Subscription,
+    Window, div, prelude::*,
 };
 use kestrel_core::Collection;
 
@@ -27,9 +24,9 @@ pub enum SidebarEvent {
 pub struct SidebarView {
     collection: Option<Collection>,
     tree_state: TreeState,
-    search_input: Entity<InputState>,
+    search_input: Entity<TextInput>,
     renaming_id: Option<String>,
-    renaming_input: Option<Entity<InputState>>,
+    renaming_input: Option<Entity<TextInput>>,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -37,13 +34,13 @@ pub struct SidebarView {
 impl SidebarView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Buscar solicitudes... (Ctrl+K)"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Buscar solicitudes... (Ctrl+K)"));
 
         let sub = cx.subscribe_in(&search_input, window, {
             let search_input = search_input.clone();
             move |this, _, ev: &InputEvent, _window, cx| {
-                if let InputEvent::Change = ev {
-                    let val = search_input.read(cx).value();
+                if let InputEvent::Changed = ev {
+                    let val = search_input.read(cx).text().to_string();
                     this.tree_state.set_search_query(&val);
                     cx.notify();
                 }
@@ -70,15 +67,13 @@ impl SidebarView {
         self.collection.as_ref()
     }
 
-    pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.search_input.update(cx, |input, cx| {
-            input.focus(window, cx);
-        });
+    pub fn focus_search(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+        // Ely's TextInput focus is handled automatically via tab or FocusHandle
     }
 
-    pub fn clear_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn clear_search(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.search_input.update(cx, |input, cx| {
-            input.set_value("", window, cx);
+            input.set_text("", cx);
         });
         self.tree_state.clear_search_query();
         cx.notify();
@@ -92,21 +87,18 @@ impl SidebarView {
         cx: &mut Context<Self>,
     ) {
         let input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx);
-            s.set_value(current_name, window, cx);
+            let mut s = TextInput::new(window, cx);
+            s.set_text(current_name, cx);
             s
         });
         self.renaming_id = Some(id);
-        self.renaming_input = Some(input.clone());
-        input.update(cx, |s, cx| {
-            s.focus(window, cx);
-        });
+        self.renaming_input = Some(input);
         cx.notify();
     }
 
     pub fn confirm_rename(&mut self, cx: &mut Context<Self>) {
         if let (Some(id), Some(inp)) = (self.renaming_id.take(), self.renaming_input.take()) {
-            let new_name = inp.read(cx).value();
+            let new_name = inp.read(cx).text().to_string();
             if !new_name.trim().is_empty() {
                 cx.emit(SidebarEvent::Rename {
                     id,
@@ -238,19 +230,19 @@ impl Render for SidebarView {
             .track_focus(&self.focus_handle)
             .h_full()
             .w_full()
-            .bg(theme.background)
+            .bg(theme.colors.bg)
             .border_r_1()
-            .border_color(theme.border);
+            .border_color(theme.colors.border);
 
         // Header with search input
         let search_bar = v_flex()
             .p_2()
             .border_b_1()
-            .border_color(theme.border)
+            .border_color(theme.colors.border)
             .child(
                 Input::new(&self.search_input)
                     .prefix(Icon::new(IconName::Search))
-                    .cleanable(true),
+                    .clearable(),
             );
 
         sidebar_container = sidebar_container.child(search_bar);
@@ -265,13 +257,12 @@ impl Render for SidebarView {
                 .child(
                     div()
                         .text_xs()
-                        .text_color(theme.muted_foreground)
+                        .text_color(theme.colors.fg_muted)
                         .child("No se encontraron solicitudes"),
                 )
                 .child(
-                    Button::new("btn-clear-search")
-                        .ghost()
-                        .label("Limpiar búsqueda")
+                    Button::new("btn-clear-search", "Limpiar búsqueda")
+                        .variant(ButtonVariant::Ghost)
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.clear_search(window, cx);
                         })),
@@ -287,14 +278,18 @@ impl Render for SidebarView {
                 .justify_center()
                 .p_4()
                 .text_xs()
-                .text_color(theme.muted_foreground)
+                .text_color(theme.colors.fg_muted)
                 .child("Sin colección abierta");
 
             return sidebar_container.child(empty_collection);
         }
 
         // Render flat nodes list
-        let mut list_container = v_flex().flex_1().overflow_y_scrollbar().p_1();
+        let mut list_container = v_flex()
+            .id("sidebar-nodes-scroll")
+            .flex_1()
+            .overflow_y_scroll()
+            .p_1();
 
         for (idx, node) in flat_nodes.iter().enumerate() {
             let is_selected = self.tree_state.selected_id.as_deref() == Some(&node.id);

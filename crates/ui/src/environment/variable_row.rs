@@ -1,11 +1,9 @@
+use crate::theme::{ThemeExt as _, h_flex};
+use ely_gpui_component::buttons::{Button, ButtonVariant, IconButton};
+use ely_gpui_component::primitives::IconName;
+use ely_gpui_component::theme::ControlSize;
 use gpui::{
     ClickEvent, FontWeight, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled, div,
-    prelude::FluentBuilder as _, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
 };
 use kestrel_core::EnvVariable;
 
@@ -57,6 +55,7 @@ where
 {
     fn render(self, _window: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let key = self.key;
         let is_enabled = self.variable.enabled;
         let is_secret = self.variable.secret;
@@ -77,29 +76,33 @@ where
             .px_2()
             .py_1p5()
             .rounded_md()
-            .bg(theme.muted.opacity(0.3))
+            .bg(colors.sunken)
             .child(
                 h_flex()
                     .items_center()
                     .gap_2()
                     .child(
-                        Button::new(SharedString::from(format!("toggle-var-{}", key)))
-                            .ghost()
-                            .label(if is_enabled { "✓" } else { "✗" })
-                            .on_click(on_toggle_enable),
+                        Button::new(
+                            SharedString::from(format!("toggle-var-{}", key)),
+                            if is_enabled { "✓" } else { "✗" },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .on_click(on_toggle_enable),
                     )
                     .child(
                         div()
                             .w(gpui::px(140.))
                             .font_weight(FontWeight::BOLD)
                             .text_xs()
+                            .text_color(colors.fg)
                             .child(key.clone()),
                     )
                     .child(
                         div()
                             .flex_1()
                             .text_xs()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .child(display_val),
                     ),
             )
@@ -108,23 +111,21 @@ where
                     .items_center()
                     .gap_1()
                     .child(
-                        Button::new(SharedString::from(format!("secret-var-{}", key)))
-                            .ghost()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(theme.muted_foreground)
-                                    .when(is_secret, |this| this.text_color(rgb(0xe06c1b)))
-                                    .child(if is_secret { "Secreto" } else { "Público" }),
-                            )
-                            .on_click(on_toggle_secret),
+                        Button::new(
+                            SharedString::from(format!("secret-var-{}", key)),
+                            if is_secret { "Secreto" } else { "Público" },
+                        )
+                        .variant(ButtonVariant::Ghost)
+                        .size(ControlSize::Sm)
+                        .on_click(on_toggle_secret),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("del-var-{}", key)))
-                            .ghost()
-                            .icon(Icon::new(IconName::Close))
-                            .on_click(on_delete),
+                        IconButton::new(
+                            SharedString::from(format!("del-var-{}", key)),
+                            IconName::X,
+                        )
+                        .size(ControlSize::Sm)
+                        .on_click(on_delete),
                     ),
             )
     }

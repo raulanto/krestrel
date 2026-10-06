@@ -1,11 +1,10 @@
+use crate::theme::{ThemeExt as _, h_flex, v_flex};
+use ely_gpui_component::buttons::{Button, ButtonVariant, IconButton};
+use ely_gpui_component::primitives::IconName;
+use ely_gpui_component::theme::ControlSize;
 use gpui::{
-    Context, FontWeight, IntoElement, ParentElement as _, Render, Styled, Window, div,
-    prelude::FluentBuilder as _, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
+    Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Render, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use kestrel_core::Environment;
 
@@ -53,6 +52,7 @@ impl gpui::EventEmitter<EnvListEvent> for EnvList {}
 impl Render for EnvList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let selected_ix = self.selected_index;
         let active_id = self.active_id.clone();
 
@@ -60,8 +60,8 @@ impl Render for EnvList {
             .w(px(220.))
             .h_full()
             .border_r_1()
-            .border_color(theme.border)
-            .bg(theme.muted.opacity(0.08))
+            .border_color(colors.border)
+            .bg(colors.sunken)
             .p_3()
             .gap_2()
             .child(
@@ -72,13 +72,12 @@ impl Render for EnvList {
                         div()
                             .font_weight(FontWeight::BOLD)
                             .text_xs()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .child("ENTORNOS"),
                     )
                     .child(
-                        Button::new("add-env-btn")
-                            .ghost()
-                            .icon(Icon::new(IconName::Plus))
+                        IconButton::new("add-env-btn", IconName::Plus)
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(|_this, _, _, cx| {
                                 cx.emit(EnvListEvent::AddEnvironment);
                             })),
@@ -101,35 +100,37 @@ impl Render for EnvList {
                             .px_2()
                             .py_1p5()
                             .rounded_md()
+                            .cursor_pointer()
                             .when(is_editing, |this| {
-                                this.bg(theme.muted.opacity(0.8))
-                                    .font_weight(FontWeight::BOLD)
+                                this.bg(colors.active).font_weight(FontWeight::BOLD)
                             })
+                            .when(!is_editing, |this| this.hover(|s| s.bg(colors.hover)))
                             .child(
-                                Button::new(format!("env-select-{}", ix))
-                                    .ghost()
-                                    .label(env_name)
+                                Button::new(format!("env-select-{}", ix), env_name)
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(move |_this, _, _, cx| {
                                         cx.emit(EnvListEvent::SelectEnvironment(ix));
                                     })),
                             )
-                            .child(
-                                Button::new(format!("env-activate-{}", ix))
-                                    .ghost()
-                                    .when(is_active, |b| {
-                                        b.child(div().size(px(8.)).rounded_full().bg(rgb(0x22c55e)))
-                                    })
-                                    .when(!is_active, |b| {
-                                        b.label("Activar").on_click(cx.listener({
-                                            let id = env_id.clone();
-                                            move |_this, _, _, cx| {
-                                                cx.emit(EnvListEvent::ActivateEnvironment(
-                                                    id.clone(),
-                                                ));
-                                            }
-                                        }))
-                                    }),
-                            )
+                            .child(if is_active {
+                                div()
+                                    .size(px(8.))
+                                    .rounded_full()
+                                    .bg(colors.success)
+                                    .into_any_element()
+                            } else {
+                                Button::new(format!("env-activate-{}", ix), "Activar")
+                                    .variant(ButtonVariant::Ghost)
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener({
+                                        let id = env_id.clone();
+                                        move |_this, _, _, cx| {
+                                            cx.emit(EnvListEvent::ActivateEnvironment(id.clone()));
+                                        }
+                                    }))
+                                    .into_any_element()
+                            })
                     })),
             )
     }

@@ -6,7 +6,7 @@ use crate::body::Body;
 
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Request {
     pub id: String,
     pub name: String,
@@ -30,6 +30,26 @@ pub struct Request {
     pub dirty: bool,
     #[serde(default, flatten)]
     pub extra: IndexMap<String, serde_json::Value>,
+}
+
+impl Request {
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            method: HttpMethod::GET,
+            url: String::new(),
+            seq: None,
+            headers: Vec::new(),
+            params: Vec::new(),
+            auth: Auth::default(),
+            body: Body::default(),
+            description: None,
+            path: None,
+            dirty: false,
+            extra: IndexMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

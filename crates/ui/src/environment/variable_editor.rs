@@ -1,17 +1,9 @@
 use std::collections::HashSet;
 
-use gpui::{
-    AppContext, Context, Entity, FontWeight, IntoElement, ParentElement as _, Render, Styled,
-    Window, div, px,
-};
-use gpui_kit::component::{
-    ActiveTheme as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    input::{Input, InputState},
-    scroll::ScrollableElement as _,
-    v_flex,
-};
+use crate::theme::{ThemeExt as _, h_flex, v_flex};
+use ely_gpui_component::buttons::Button;
+use ely_gpui_component::forms::{Input, TextInput};
+use gpui::{AppContext, Context, Entity, FontWeight, Window, div, prelude::*, px};
 use kestrel_core::{EnvVariable, Environment};
 
 use super::variable_row::VariableRow;
@@ -24,18 +16,18 @@ pub enum VariableEditorEvent {
 }
 
 pub struct VariablesEditor {
-    var_name_input: Entity<InputState>,
-    var_value_input: Entity<InputState>,
+    var_name_input: Entity<TextInput>,
+    var_value_input: Entity<TextInput>,
     revealed_secrets: HashSet<String>,
 }
 
 impl VariablesEditor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let var_name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Nombre de la variable (ej. baseUrl)")
+            TextInput::new(window, cx).placeholder("Nombre de la variable (ej. baseUrl)")
         });
         let var_value_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Valor de la variable"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Valor de la variable"));
 
         Self {
             var_name_input,
@@ -46,6 +38,7 @@ impl VariablesEditor {
 
     pub fn render_editor(&mut self, env: &Environment, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let env_name = env.name.clone();
         let vars: Vec<(String, EnvVariable)> = env
             .variables
@@ -66,9 +59,10 @@ impl VariablesEditor {
                             div()
                                 .font_weight(FontWeight::BOLD)
                                 .text_base()
+                                .text_color(colors.fg)
                                 .child(env_name),
                         )
-                        .child(div().text_xs().text_color(theme.muted_foreground).child(
+                        .child(div().text_xs().text_color(colors.fg_muted).child(
                             "Usa estas variables en URLs, Headers y Body como {{variable}}.",
                         )),
                 ),
@@ -76,31 +70,21 @@ impl VariablesEditor {
             .child(
                 h_flex()
                     .gap_2()
+                    .child(div().w(px(180.)).child(Input::new(&self.var_name_input)))
+                    .child(div().flex_1().child(Input::new(&self.var_value_input)))
                     .child(
-                        div()
-                            .w(px(180.))
-                            .child(Input::new(&self.var_name_input).bordered(true)),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(Input::new(&self.var_value_input).bordered(true)),
-                    )
-                    .child(
-                        Button::new("add-var-btn")
+                        Button::new("add-var-btn", "Agregar")
                             .primary()
-                            .label("Agregar")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                let name = this.var_name_input.read(cx).value().trim().to_string();
-                                let value =
-                                    this.var_value_input.read(cx).value().trim().to_string();
+                            .on_click(cx.listener(|this, _, _window, cx| {
+                                let name = this.var_name_input.read(cx).text().trim().to_string();
+                                let value = this.var_value_input.read(cx).text().trim().to_string();
                                 if !name.is_empty() {
                                     cx.emit(VariableEditorEvent::AddVariable { name, value });
                                     this.var_name_input.update(cx, |input, cx| {
-                                        input.set_value("", window, cx);
+                                        input.set_text("", cx);
                                     });
                                     this.var_value_input.update(cx, |input, cx| {
-                                        input.set_value("", window, cx);
+                                        input.set_text("", cx);
                                     });
                                 }
                             })),
@@ -108,18 +92,19 @@ impl VariablesEditor {
             )
             .child(
                 div()
+                    .id("var-editor-scroll")
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_3()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(if vars.is_empty() {
                         div()
                             .p_4()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .child("No hay variables definidas en este entorno.")
                     } else {
                         v_flex()

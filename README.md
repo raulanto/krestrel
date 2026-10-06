@@ -51,18 +51,49 @@ Dependencias de sistema de GPUI:
 
 | SO | Requisitos |
 | --- | --- |
-| macOS | Xcode y Command Line Tools (Metal) |
+| macOS | Command Line Tools (los shaders de Metal se compilan en tiempo de ejecución; no hace falta Xcode completo) |
 | Windows | Visual Studio Build Tools (C++) |
 | Linux | Vulkan, Wayland/X11, `libxkbcommon`, `fontconfig` |
 
+> Ely GPUI Component está probado únicamente en macOS. En Windows y Linux, verifica el comportamiento de los componentes antes de depender de ellos.
+
 ## Dependencias principales
+
+Stack de UI fijado:
 
 ```toml
 [dependencies]
-gpui-kit = "0.7.1"
+# GPUI y stack de UI (Ely GPUI Component + Zed GPUI)
+ely-gpui-component = { git = "https://github.com/ZacharyZhang-NY/Ely-GPUI-Components" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b", features = ["font-kit", "wayland", "x11"] }
 ```
 
-Se usarán además `gpui`, `tokio`, `reqwest`, `serde`, `serde_json`, `serde_yaml` y `anyhow`. Revisa que la versión de `gpui` sea la compatible con `gpui-kit 0.7.1`.
+- **[Ely GPUI Component](https://github.com/ZacharyZhang-NY/Ely-GPUI-Components)**: biblioteca de componentes para GPUI, con tema claro y oscuro de paleta cálida y sobria. Es la base visual de la interfaz.
+- **gpui_platform** con `font-kit`, `wayland` y `x11`: soporte multiplataforma para fuentes y servidores de ventanas en macOS/Linux.
+
+Se usarán además `tokio`, `reqwest`, `serde`, `serde_json`, `serde_yaml` y `anyhow`.
+
+### Inicialización
+
+```rust
+use ely_gpui_component::{Assets, theme::{Mode, Theme}};
+use gpui::App;
+
+fn main() {
+    gpui_platform::application().with_assets(Assets).run(|cx: &mut App| {
+        ely_gpui_component::init(cx);
+        Theme::set_mode(Mode::Dark, cx);
+        // ...abrir ventana principal
+    });
+}
+```
+
+`ely_gpui_component::init` registra fuentes y tema, y entra en pánico si `Assets` no está conectado a la aplicación.
+
+### Galería de componentes
+
+Todos los componentes de Ely se pueden ver funcionando en <https://ely-gpui.zacharyzhang.com>. Consúltala antes de crear un componente propio.
 
 ## Estructura del proyecto
 
@@ -73,6 +104,7 @@ kestrel/
 ├── crates/
 │   ├── app/            # binario, ventana y arranque de GPUI
 │   ├── ui/             # vistas y componentes (sidebar, tabs, editor, respuesta)
+│   │   └── theme/      # adaptador único de tema (Ely GPUI Components)
 │   ├── core/           # modelos de dominio: Collection, Request, Environment
 │   ├── storage/        # lectura/escritura OpenCollection YAML
 │   ├── importers/      # Postman y Yaak

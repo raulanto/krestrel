@@ -1,14 +1,11 @@
 //! Row component (`RenderOnce`) for individual tree nodes in the sidebar.
 
 use crate::sidebar::tree_state::{FlatNodeKind, FlatTreeNode};
+use crate::theme::{ThemeExt as _, h_flex, http_method_badge};
+use ely_gpui_component::primitives::{Icon, IconName};
 use gpui::{
-    AnyElement, App, ClickEvent, FontWeight, IntoElement, ParentElement as _, RenderOnce,
-    Styled as _, Window, div, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
+    AnyElement, App, ClickEvent, FontWeight, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kestrel_core::HttpMethod;
 
@@ -66,12 +63,22 @@ impl RenderOnce for SidebarRow {
         let theme = cx.theme();
         let indent = (self.node.depth as f32) * 12.0;
 
-        let mut btn = Button::new(format!("row-node-{}", self.node.id))
-            .ghost()
-            .w_full();
+        let mut row_container = div()
+            .id(format!("row-node-{}", self.node.id))
+            .w_full()
+            .py_1()
+            .px_1()
+            .rounded_md()
+            .cursor_pointer()
+            .hover(|s| s.bg(theme.colors.hover))
+            .active(|s| s.bg(theme.colors.active));
+
+        if self.is_selected {
+            row_container = row_container.bg(theme.colors.active);
+        }
 
         if let Some(handler) = self.on_click {
-            btn = btn.on_click(handler);
+            row_container = row_container.on_click(handler);
         }
 
         match &self.node.kind {
@@ -91,7 +98,7 @@ impl RenderOnce for SidebarRow {
                     IconName::ChevronDown
                 };
 
-                let chevron = Icon::new(chevron_name).text_color(theme.muted_foreground);
+                let chevron = Icon::new(chevron_name).color(theme.colors.fg_muted);
 
                 let folder_content = h_flex()
                     .w_full()
@@ -103,14 +110,14 @@ impl RenderOnce for SidebarRow {
                     } else {
                         div().w(px(12.0)).into_any_element()
                     })
-                    .child(Icon::new(icon_name).text_color(rgb(0xe06c1b)))
+                    .child(Icon::new(icon_name).color(theme.colors.warning))
                     .child(render_highlighted_text(
                         &self.node.name,
                         &self.node.matched_indices,
                         cx,
                     ));
 
-                btn.child(folder_content)
+                row_container.child(folder_content)
             }
             FlatNodeKind::Request { method, .. } => {
                 let req_content = h_flex()
@@ -118,14 +125,14 @@ impl RenderOnce for SidebarRow {
                     .pl(px(indent + 16.0))
                     .items_center()
                     .gap_2()
-                    .child(method_badge(*method))
+                    .child(method_badge(*method, cx))
                     .child(render_highlighted_text(
                         &self.node.name,
                         &self.node.matched_indices,
                         cx,
                     ));
 
-                btn.child(req_content)
+                row_container.child(req_content)
             }
             FlatNodeKind::ErrorNode {
                 error_message,
@@ -146,24 +153,17 @@ impl RenderOnce for SidebarRow {
                     .pl(px(indent + 16.0))
                     .items_center()
                     .gap_2()
-                    .child(div().text_color(rgb(0xef4444)).child(err_label));
+                    .child(div().text_color(theme.colors.danger).child(err_label));
 
-                btn.child(err_content)
+                row_container.child(err_content)
             }
         }
     }
 }
 
-fn method_badge(method: HttpMethod) -> impl IntoElement {
-    let (bg, fg, label) = match method {
-        HttpMethod::GET => (rgb(0x22c55e), rgb(0xffffff), "GET"),
-        HttpMethod::POST => (rgb(0xeab308), rgb(0x000000), "POST"),
-        HttpMethod::PUT => (rgb(0x3b82f6), rgb(0xffffff), "PUT"),
-        HttpMethod::DELETE => (rgb(0xef4444), rgb(0xffffff), "DEL"),
-        HttpMethod::PATCH => (rgb(0xa855f7), rgb(0xffffff), "PATCH"),
-        HttpMethod::HEAD => (rgb(0x6b7280), rgb(0xffffff), "HEAD"),
-        HttpMethod::OPTIONS => (rgb(0x6b7280), rgb(0xffffff), "OPT"),
-    };
+fn method_badge(method: HttpMethod, cx: &App) -> impl IntoElement {
+    let theme = cx.theme();
+    let (bg, fg, label) = http_method_badge(method, &theme.colors);
 
     div()
         .px_1()
@@ -180,7 +180,7 @@ fn render_highlighted_text(text: &str, matched_indices: &[usize], cx: &App) -> A
     let theme = cx.theme();
     if matched_indices.is_empty() {
         return div()
-            .text_color(theme.foreground)
+            .text_color(theme.colors.fg)
             .child(text.to_string())
             .into_any_element();
     }
@@ -193,11 +193,11 @@ fn render_highlighted_text(text: &str, matched_indices: &[usize], cx: &App) -> A
         let span = if is_matched {
             div()
                 .font_weight(FontWeight::BOLD)
-                .text_color(theme.accent_foreground)
-                .bg(theme.accent)
+                .text_color(theme.colors.on_accent)
+                .bg(theme.colors.accent)
                 .child(ch.to_string())
         } else {
-            div().text_color(theme.foreground).child(ch.to_string())
+            div().text_color(theme.colors.fg).child(ch.to_string())
         };
         container = container.child(span);
     }

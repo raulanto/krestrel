@@ -1,14 +1,11 @@
+use crate::theme::{ThemeExt as _, h_flex, v_flex};
+use ely_gpui_component::buttons::{Button, ButtonVariant};
+use ely_gpui_component::forms::{Input, InputEvent, TextInput};
+use ely_gpui_component::primitives::{Icon, IconName};
 use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FontWeight, IntoElement, ParentElement as _,
-    Render, Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement as _,
-    v_flex,
+    App, AppContext, Context, Entity, EventEmitter, FontWeight, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, StatefulInteractiveElement as _, Styled, Subscription,
+    Window, div, prelude::FluentBuilder as _, px, rgb,
 };
 use kestrel_core::{
     ApiKeyLocation, Auth, Body, FormEntry, FormValue, HeaderParam, HttpMethod, KeyValuePair,
@@ -48,14 +45,14 @@ pub struct RequestEditor {
     request: Option<Request>,
     active_tab: EditorTab,
     selected_body_format: BodyFormat,
-    url_input: Entity<InputState>,
-    body_input: Entity<InputState>,
-    graphql_vars_input: Entity<InputState>,
-    auth_token_input: Entity<InputState>,
-    auth_user_input: Entity<InputState>,
-    auth_pass_input: Entity<InputState>,
-    auth_key_name_input: Entity<InputState>,
-    auth_key_val_input: Entity<InputState>,
+    url_input: Entity<TextInput>,
+    body_input: Entity<TextInput>,
+    graphql_vars_input: Entity<TextInput>,
+    auth_token_input: Entity<TextInput>,
+    auth_user_input: Entity<TextInput>,
+    auth_pass_input: Entity<TextInput>,
+    auth_key_name_input: Entity<TextInput>,
+    auth_key_val_input: Entity<TextInput>,
     active_environment: Option<kestrel_core::Environment>,
     is_dirty: bool,
     _subscriptions: Vec<Subscription>,
@@ -63,40 +60,39 @@ pub struct RequestEditor {
 
 impl RequestEditor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let url_input = cx
-            .new(|cx| InputState::new(window, cx).placeholder("https://api.example.com/endpoint"));
+        let url_input =
+            cx.new(|cx| TextInput::new(window, cx).placeholder("https://api.example.com/endpoint"));
 
         let body_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("{\n  \"clave\": \"valor\"\n}"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("{\n  \"clave\": \"valor\"\n}"));
 
         let graphql_vars_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("{\n  \"variable\": 123\n}"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("{\n  \"variable\": 123\n}"));
 
         let auth_token_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Token de autenticación (ej. Bearer JWT)")
+            TextInput::new(window, cx).placeholder("Token de autenticación (ej. Bearer JWT)")
         });
 
-        let auth_user_input = cx.new(|cx| InputState::new(window, cx).placeholder("Usuario"));
+        let auth_user_input = cx.new(|cx| TextInput::new(window, cx).placeholder("Usuario"));
 
         let auth_pass_input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextInput::new(window, cx)
                 .placeholder("Contraseña")
-                .masked(true)
+                .masked()
         });
 
-        let auth_key_name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Nombre de la clave (ej. X-API-Key)")
-        });
+        let auth_key_name_input = cx
+            .new(|cx| TextInput::new(window, cx).placeholder("Nombre de la clave (ej. X-API-Key)"));
 
         let auth_key_val_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Valor de la clave"));
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Valor de la clave"));
 
         let sub_url = cx.subscribe_in(
             &url_input,
             window,
             |this, _, ev: &InputEvent, _window, cx| {
-                if let InputEvent::Change = ev {
-                    let val = this.url_input.read(cx).value().to_string();
+                if let InputEvent::Changed = ev {
+                    let val = this.url_input.read(cx).text().to_string();
                     if let Some(req) = &mut this.request {
                         req.url = val.clone();
                     }
@@ -112,8 +108,8 @@ impl RequestEditor {
             &body_input,
             window,
             |this, _, ev: &InputEvent, _window, cx| {
-                if let InputEvent::Change = ev {
-                    let val = this.body_input.read(cx).value().to_string();
+                if let InputEvent::Changed = ev {
+                    let val = this.body_input.read(cx).text().to_string();
                     if let Some(req) = &mut this.request {
                         match this.selected_body_format {
                             BodyFormat::Json => req.body = Body::Json { content: val },
@@ -143,8 +139,8 @@ impl RequestEditor {
             &graphql_vars_input,
             window,
             |this, _, ev: &InputEvent, _window, cx| {
-                if let InputEvent::Change = ev {
-                    let vars_str = this.graphql_vars_input.read(cx).value().to_string();
+                if let InputEvent::Changed = ev {
+                    let vars_str = this.graphql_vars_input.read(cx).text().to_string();
                     let vars = if vars_str.trim().is_empty() {
                         None
                     } else {
@@ -192,10 +188,10 @@ impl RequestEditor {
         cx.notify();
     }
 
-    pub fn set_request(&mut self, req: Request, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn set_request(&mut self, req: Request, _window: &mut Window, cx: &mut Context<Self>) {
         let url_str = req.url.clone();
         self.url_input.update(cx, |input, cx| {
-            input.set_value(url_str, window, cx);
+            input.set_text(url_str, cx);
         });
 
         // Determine Body format and populate body_input
@@ -203,14 +199,14 @@ impl RequestEditor {
             Body::None => {
                 self.selected_body_format = BodyFormat::None;
                 self.body_input.update(cx, |input, cx| {
-                    input.set_value(String::new(), window, cx);
+                    input.set_text(String::new(), cx);
                 });
             }
             Body::Json { content } => {
                 self.selected_body_format = BodyFormat::Json;
                 let c = content.clone();
                 self.body_input.update(cx, |input, cx| {
-                    input.set_value(c, window, cx);
+                    input.set_text(c, cx);
                 });
             }
             Body::Raw {
@@ -224,7 +220,7 @@ impl RequestEditor {
                 }
                 let c = content.clone();
                 self.body_input.update(cx, |input, cx| {
-                    input.set_value(c, window, cx);
+                    input.set_text(c, cx);
                 });
             }
             Body::UrlEncoded { .. } => {
@@ -237,19 +233,19 @@ impl RequestEditor {
                 self.selected_body_format = BodyFormat::Binary;
                 let path = file_path.clone();
                 self.body_input.update(cx, |input, cx| {
-                    input.set_value(path, window, cx);
+                    input.set_text(path, cx);
                 });
             }
             Body::GraphQL { query, variables } => {
                 self.selected_body_format = BodyFormat::GraphQL;
                 let q = query.clone();
                 self.body_input.update(cx, |input, cx| {
-                    input.set_value(q, window, cx);
+                    input.set_text(q, cx);
                 });
                 if let Some(vars) = variables {
                     let v = vars.clone();
                     self.graphql_vars_input.update(cx, |input, cx| {
-                        input.set_value(v, window, cx);
+                        input.set_text(v, cx);
                     });
                 }
             }
@@ -261,27 +257,27 @@ impl RequestEditor {
             Auth::Bearer { token } => {
                 let t = token.clone();
                 self.auth_token_input.update(cx, |input, cx| {
-                    input.set_value(t, window, cx);
+                    input.set_text(t, cx);
                 });
             }
             Auth::Basic { username, password } => {
                 let u = username.clone();
                 let p = password.clone();
                 self.auth_user_input.update(cx, |input, cx| {
-                    input.set_value(u, window, cx);
+                    input.set_text(u, cx);
                 });
                 self.auth_pass_input.update(cx, |input, cx| {
-                    input.set_value(p, window, cx);
+                    input.set_text(p, cx);
                 });
             }
             Auth::ApiKey { key, value, .. } => {
                 let k = key.clone();
                 let v = value.clone();
                 self.auth_key_name_input.update(cx, |input, cx| {
-                    input.set_value(k, window, cx);
+                    input.set_text(k, cx);
                 });
                 self.auth_key_val_input.update(cx, |input, cx| {
-                    input.set_value(v, window, cx);
+                    input.set_text(v, cx);
                 });
             }
         }
@@ -299,9 +295,9 @@ impl RequestEditor {
     /// body input, headers, query parameters, and auth inputs.
     pub fn build_current_request(&self, cx: &App) -> Option<Request> {
         let mut req = self.request.clone()?;
-        req.url = self.url_input.read(cx).value().to_string();
+        req.url = self.url_input.read(cx).text().to_string();
 
-        let body_val = self.body_input.read(cx).value().to_string();
+        let body_val = self.body_input.read(cx).text().to_string();
         req.body = match self.selected_body_format {
             BodyFormat::None => Body::None,
             BodyFormat::Json => Body::Json { content: body_val },
@@ -333,7 +329,7 @@ impl RequestEditor {
                 file_path: body_val,
             },
             BodyFormat::GraphQL => {
-                let vars_str = self.graphql_vars_input.read(cx).value().to_string();
+                let vars_str = self.graphql_vars_input.read(cx).text().to_string();
                 let vars = if vars_str.trim().is_empty() {
                     None
                 } else {
@@ -350,15 +346,15 @@ impl RequestEditor {
         req.auth = match &req.auth {
             Auth::None => Auth::None,
             Auth::Bearer { .. } => Auth::Bearer {
-                token: self.auth_token_input.read(cx).value().to_string(),
+                token: self.auth_token_input.read(cx).text().to_string(),
             },
             Auth::Basic { .. } => Auth::Basic {
-                username: self.auth_user_input.read(cx).value().to_string(),
-                password: self.auth_pass_input.read(cx).value().to_string(),
+                username: self.auth_user_input.read(cx).text().to_string(),
+                password: self.auth_pass_input.read(cx).text().to_string(),
             },
             Auth::ApiKey { location, .. } => Auth::ApiKey {
-                key: self.auth_key_name_input.read(cx).value().to_string(),
-                value: self.auth_key_val_input.read(cx).value().to_string(),
+                key: self.auth_key_name_input.read(cx).text().to_string(),
+                value: self.auth_key_val_input.read(cx).text().to_string(),
                 location: *location,
             },
         };
@@ -396,7 +392,7 @@ impl RequestEditor {
 
     fn set_body_format(&mut self, format: BodyFormat, cx: &mut Context<Self>) {
         self.selected_body_format = format;
-        let body_content = self.body_input.read(cx).value().to_string();
+        let body_content = self.body_input.read(cx).text().to_string();
 
         if let Some(req) = &mut self.request {
             req.body = match format {
@@ -447,14 +443,14 @@ impl RequestEditor {
         cx.notify();
     }
 
-    fn prettify_json_body(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let current_val = self.body_input.read(cx).value().to_string();
+    fn prettify_json_body(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let current_val = self.body_input.read(cx).text().to_string();
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&current_val)
             && let Ok(pretty) = serde_json::to_string_pretty(&parsed)
         {
             let pretty_clone = pretty.clone();
             self.body_input.update(cx, |input, cx| {
-                input.set_value(pretty_clone, window, cx);
+                input.set_text(pretty_clone, cx);
             });
             if let Some(req) = &mut self.request {
                 req.body = Body::Json { content: pretty };
@@ -499,6 +495,7 @@ impl EventEmitter<EditorEvent> for RequestEditor {}
 impl Render for RequestEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let method = self
             .request
             .as_ref()
@@ -531,13 +528,13 @@ impl Render for RequestEditor {
                             .items_center()
                             .gap_1p5()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .child(div().child("Colección"))
                             .child(div().child(">"))
                             .child(
                                 div()
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(theme.foreground)
+                                    .text_color(colors.fg)
                                     .child(req_name),
                             )
                             .when(self.is_dirty, |this| {
@@ -545,16 +542,15 @@ impl Render for RequestEditor {
                                     div()
                                         .text_xs()
                                         .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(0xe06c1b))
+                                        .text_color(colors.accent)
                                         .child("• Modificado"),
                                 )
                             }),
                     )
                     .child(
-                        Button::new("save-req-btn")
-                            .ghost()
-                            .icon(Icon::new(IconName::FileText))
-                            .label("Guardar")
+                        Button::new("save-req-btn", "Guardar")
+                            .variant(ButtonVariant::Ghost)
+                            .icon(IconName::FileText)
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.is_dirty = false;
                                 cx.emit(EditorEvent::SaveRequest);
@@ -570,8 +566,16 @@ impl Render for RequestEditor {
                     .w_full()
                     .child(
                         // Method Selector Pill (click to cycle method)
-                        Button::new("method-pill-btn")
-                            .ghost()
+                        div()
+                            .id("method-pill-btn")
+                            .px_3()
+                            .py_1p5()
+                            .rounded_md()
+                            .cursor_pointer()
+                            .bg(colors.surface)
+                            .border_1()
+                            .border_color(colors.border)
+                            .hover(|s| s.bg(colors.hover))
                             .on_click(cx.listener(|this, _, _window, cx| {
                                 this.toggle_method(cx);
                             }))
@@ -586,18 +590,17 @@ impl Render for RequestEditor {
                                             .text_color(method_color(method))
                                             .child(format!("{:?}", method)),
                                     )
-                                    .child(Icon::new(IconName::ChevronDown)),
+                                    .child(Icon::new(IconName::ChevronDown).color(colors.fg_muted)),
                             ),
                     )
                     .child(
                         div()
                             .flex_1()
-                            .child(Input::new(&self.url_input).bordered(true).cleanable(true)),
+                            .child(Input::new(&self.url_input).clearable()),
                     )
                     .child(
-                        Button::new("send-req-btn")
+                        Button::new("send-req-btn", "Enviar")
                             .primary()
-                            .label("Enviar")
                             .on_click(cx.listener(|_this, _, _window, cx| {
                                 cx.emit(EditorEvent::SendRequest);
                             })),
@@ -609,7 +612,7 @@ impl Render for RequestEditor {
                     .items_center()
                     .gap_2()
                     .border_b_1()
-                    .border_color(theme.border)
+                    .border_color(colors.border)
                     .pb_2()
                     .child(render_subtab_button(
                         "subtab-path",
@@ -677,6 +680,7 @@ impl RequestEditor {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
 
         v_flex()
             .flex_1()
@@ -743,10 +747,8 @@ impl RequestEditor {
                     .when(selected_format == BodyFormat::Json, |this| {
                         this.child(
                             h_flex().flex_1().justify_end().child(
-                                Button::new("btn-prettify-json")
-                                    .ghost()
-                                    .label("Formatear JSON")
-                                    .tooltip("Prettify JSON con indentación estándar")
+                                Button::new("btn-prettify-json", "Formatear JSON")
+                                    .variant(ButtonVariant::Ghost)
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.prettify_json_body(window, cx);
                                     })),
@@ -757,25 +759,23 @@ impl RequestEditor {
             // Body Input Canvas
             .child(
                 div()
+                    .id("body-editor-scroll")
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_3()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(match selected_format {
                         BodyFormat::None => div()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .p_4()
                             .child("Esta solicitud no tiene cuerpo (Body: None)")
                             .into_any_element(),
                         BodyFormat::Json | BodyFormat::Text | BodyFormat::Xml => {
-                            Input::new(&self.body_input)
-                                .h_full()
-                                .cleanable(false)
-                                .into_any_element()
+                            Input::new(&self.body_input).into_any_element()
                         }
                         BodyFormat::FormUrlEncoded => {
                             self.render_key_value_form(cx).into_any_element()
@@ -790,17 +790,17 @@ impl RequestEditor {
                                     .font_weight(FontWeight::BOLD)
                                     .child("Ruta del archivo:"),
                             )
-                            .child(Input::new(&self.body_input).bordered(true))
+                            .child(Input::new(&self.body_input))
                             .into_any_element(),
                         BodyFormat::GraphQL => v_flex()
                             .size_full()
                             .gap_3()
-                            .child(div().flex_1().child(Input::new(&self.body_input).h_full()))
+                            .child(div().flex_1().child(Input::new(&self.body_input)))
                             .child(
                                 div()
                                     .h(px(120.))
                                     .border_t_1()
-                                    .border_color(theme.border)
+                                    .border_color(colors.border)
                                     .pt_2()
                                     .child(
                                         div()
@@ -808,7 +808,7 @@ impl RequestEditor {
                                             .font_weight(FontWeight::BOLD)
                                             .child("Variables (JSON):"),
                                     )
-                                    .child(Input::new(&self.graphql_vars_input).h_full()),
+                                    .child(Input::new(&self.graphql_vars_input)),
                             )
                             .into_any_element(),
                     }),
@@ -817,6 +817,7 @@ impl RequestEditor {
 
     fn render_headers_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let headers = self
             .request
             .as_ref()
@@ -838,10 +839,9 @@ impl RequestEditor {
                             .child("Encabezados HTTP (Headers)"),
                     )
                     .child(
-                        Button::new("add-hdr-btn")
-                            .ghost()
-                            .icon(Icon::new(IconName::Plus))
-                            .label("Agregar Header")
+                        Button::new("add-hdr-btn", "Agregar Header")
+                            .variant(ButtonVariant::Ghost)
+                            .icon(IconName::Plus)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.add_header_param(cx);
                             })),
@@ -849,17 +849,18 @@ impl RequestEditor {
             )
             .child(
                 div()
+                    .id("headers-editor-scroll")
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_3()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(if headers.is_empty() {
                         div()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .p_4()
                             .child("Sin encabezados configurados")
                     } else {
@@ -872,7 +873,7 @@ impl RequestEditor {
                                     .px_3()
                                     .py_2()
                                     .rounded_md()
-                                    .bg(theme.muted.opacity(0.18))
+                                    .bg(colors.sunken)
                                     .child(
                                         div()
                                             .w(px(180.))
@@ -888,9 +889,9 @@ impl RequestEditor {
                                             .child(h.value),
                                     )
                                     .child(
-                                        Button::new(format!("del-hdr-{}", ix))
-                                            .ghost()
-                                            .icon(Icon::new(IconName::Close))
+                                        Button::new(format!("del-hdr-{}", ix), "Eliminar")
+                                            .variant(ButtonVariant::Ghost)
+                                            .icon(IconName::X)
                                             .on_click(cx.listener(move |this, _, _, cx| {
                                                 if let Some(req) = this
                                                     .request
@@ -910,6 +911,7 @@ impl RequestEditor {
 
     fn render_query_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let params = self
             .request
             .as_ref()
@@ -931,10 +933,9 @@ impl RequestEditor {
                             .child("Parámetros de consulta (Query Params)"),
                     )
                     .child(
-                        Button::new("add-param-btn")
-                            .ghost()
-                            .icon(Icon::new(IconName::Plus))
-                            .label("Agregar Parámetro")
+                        Button::new("add-param-btn", "Agregar Parámetro")
+                            .variant(ButtonVariant::Ghost)
+                            .icon(IconName::Plus)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.add_query_param(cx);
                             })),
@@ -942,17 +943,18 @@ impl RequestEditor {
             )
             .child(
                 div()
+                    .id("query-params-editor-scroll")
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_3()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(if params.is_empty() {
                         div()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .p_4()
                             .child("Sin parámetros de consulta")
                     } else {
@@ -965,7 +967,7 @@ impl RequestEditor {
                                     .px_3()
                                     .py_2()
                                     .rounded_md()
-                                    .bg(theme.muted.opacity(0.18))
+                                    .bg(colors.sunken)
                                     .child(
                                         div()
                                             .w(px(180.))
@@ -981,9 +983,9 @@ impl RequestEditor {
                                             .child(p.value),
                                     )
                                     .child(
-                                        Button::new(format!("del-param-{}", ix))
-                                            .ghost()
-                                            .icon(Icon::new(IconName::Close))
+                                        Button::new(format!("del-param-{}", ix), "Eliminar")
+                                            .variant(ButtonVariant::Ghost)
+                                            .icon(IconName::X)
                                             .on_click(cx.listener(move |this, _, _, cx| {
                                                 if let Some(req) = this
                                                     .request
@@ -1003,11 +1005,12 @@ impl RequestEditor {
 
     fn render_path_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let raw_url = self.url_input.read(cx).value();
+        let colors = &theme.colors;
+        let raw_url = self.url_input.read(cx).text().to_string();
         let resolved_url = if let Some(env) = &self.active_environment {
             kestrel_core::resolve_variables(&raw_url, &[env])
         } else {
-            raw_url.to_string()
+            raw_url.clone()
         };
 
         v_flex()
@@ -1025,8 +1028,8 @@ impl RequestEditor {
                             .text_xs()
                             .p_3()
                             .rounded_md()
-                            .bg(theme.muted.opacity(0.4))
-                            .child(raw_url.to_string()),
+                            .bg(colors.sunken)
+                            .child(raw_url),
                     ),
             )
             .child(
@@ -1041,7 +1044,7 @@ impl RequestEditor {
                                 div()
                                     .text_xs()
                                     .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(0x22c55e))
+                                    .text_color(colors.success)
                                     .child(if self.active_environment.is_some() {
                                         "✓ Entorno activo aplicado"
                                     } else {
@@ -1056,21 +1059,22 @@ impl RequestEditor {
                             .p_3()
                             .rounded_md()
                             .border_1()
-                            .border_color(theme.border)
-                            .bg(theme.background)
+                            .border_color(colors.border)
+                            .bg(colors.bg)
                             .child(resolved_url),
                     ),
             )
             .child(
                 div()
                     .text_xs()
-                    .text_color(theme.muted_foreground)
+                    .text_color(colors.fg_muted)
                     .child("Las variables de entorno en la URL (ej. {{baseUrl}}) se resuelven dinámicamente con los valores del entorno seleccionado."),
             )
     }
 
     fn render_auth_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let auth = self
             .request
             .as_ref()
@@ -1149,13 +1153,13 @@ impl RequestEditor {
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_4()
                     .child(match auth {
                         Auth::None => div()
                             .text_sm()
-                            .text_color(theme.muted_foreground)
+                            .text_color(colors.fg_muted)
                             .child("Sin autenticación configurada."),
                         Auth::Bearer { .. } => v_flex()
                             .gap_2()
@@ -1165,7 +1169,7 @@ impl RequestEditor {
                                     .font_weight(FontWeight::BOLD)
                                     .child("Token Bearer:"),
                             )
-                            .child(Input::new(&self.auth_token_input).bordered(true)),
+                            .child(Input::new(&self.auth_token_input)),
                         Auth::Basic { .. } => v_flex()
                             .gap_3()
                             .child(
@@ -1174,14 +1178,14 @@ impl RequestEditor {
                                     .font_weight(FontWeight::BOLD)
                                     .child("Usuario:"),
                             )
-                            .child(Input::new(&self.auth_user_input).bordered(true))
+                            .child(Input::new(&self.auth_user_input))
                             .child(
                                 div()
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .child("Contraseña:"),
                             )
-                            .child(Input::new(&self.auth_pass_input).bordered(true)),
+                            .child(Input::new(&self.auth_pass_input)),
                         Auth::ApiKey { .. } => v_flex()
                             .gap_3()
                             .child(
@@ -1190,14 +1194,14 @@ impl RequestEditor {
                                     .font_weight(FontWeight::BOLD)
                                     .child("Nombre de Header o Parámetro:"),
                             )
-                            .child(Input::new(&self.auth_key_name_input).bordered(true))
+                            .child(Input::new(&self.auth_key_name_input))
                             .child(
                                 div()
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .child("Valor:"),
                             )
-                            .child(Input::new(&self.auth_key_val_input).bordered(true)),
+                            .child(Input::new(&self.auth_key_val_input)),
                     }),
             )
     }
@@ -1253,12 +1257,13 @@ fn render_subtab_button(
     is_active: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Button {
-    let btn = Button::new(id).label(label.to_string()).on_click(on_click);
+    let mut btn = Button::new(id, label.to_string()).on_click(on_click);
     if is_active {
-        btn.outline()
+        btn = btn.variant(ButtonVariant::Outline);
     } else {
-        btn.ghost()
+        btn = btn.variant(ButtonVariant::Ghost);
     }
+    btn
 }
 
 fn format_selector_button(
@@ -1267,12 +1272,13 @@ fn format_selector_button(
     is_active: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Button {
-    let btn = Button::new(id).label(label.to_string()).on_click(on_click);
+    let mut btn = Button::new(id, label.to_string()).on_click(on_click);
     if is_active {
-        btn.outline()
+        btn = btn.variant(ButtonVariant::Outline);
     } else {
-        btn.ghost()
+        btn = btn.variant(ButtonVariant::Ghost);
     }
+    btn
 }
 
 fn method_color(method: HttpMethod) -> gpui::Rgba {

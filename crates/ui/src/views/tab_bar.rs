@@ -1,11 +1,10 @@
+use crate::theme::{ThemeExt as _, h_flex, http_method_badge};
+use ely_gpui_component::buttons::IconButton;
+use ely_gpui_component::primitives::IconName;
+use ely_gpui_component::theme::ControlSize;
 use gpui::{
-    Context, EventEmitter, FontWeight, IntoElement, ParentElement as _, Render, Styled, Window,
-    div, prelude::FluentBuilder as _, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
+    Context, EventEmitter, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
+    Render, StatefulInteractiveElement as _, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use kestrel_core::HttpMethod;
 
@@ -68,14 +67,15 @@ impl EventEmitter<TabBarEvent> for WorkspaceTabBar {}
 impl Render for WorkspaceTabBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let active_ix = self.active_index;
 
         h_flex()
             .h(px(38.))
             .w_full()
             .border_b_1()
-            .border_color(theme.border)
-            .bg(theme.muted.opacity(0.18))
+            .border_color(colors.border)
+            .bg(colors.sunken)
             .items_center()
             .children(self.tabs.iter().enumerate().map(|(ix, tab)| {
                 let is_active = ix == active_ix;
@@ -83,63 +83,64 @@ impl Render for WorkspaceTabBar {
                 let method = tab.method;
                 let is_dirty = tab.is_dirty;
 
+                let (method_bg, method_fg, method_label) = http_method_badge(method, colors);
+
                 h_flex()
+                    .id(format!("tab-item-{}", ix))
                     .h_full()
                     .px_2()
                     .items_center()
                     .gap_1p5()
                     .border_r_1()
-                    .border_color(theme.border)
+                    .border_color(colors.border)
                     .text_xs()
                     .cursor_pointer()
                     .when(is_active, |this| {
-                        this.bg(theme.background)
+                        this.bg(colors.bg)
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(rgb(0xe06c1b)) // Warm highlight
+                            .text_color(colors.accent)
                             .border_t_2()
-                            .border_color(rgb(0xe06c1b))
+                            .border_color(colors.accent)
                     })
-                    .when(!is_active, |this| this.text_color(theme.muted_foreground))
-                    .child(tab_method_label(method))
+                    .when(!is_active, |this| {
+                        this.text_color(colors.fg_muted)
+                            .hover(|s| s.bg(colors.hover))
+                    })
+                    .on_click(cx.listener(move |this, _, _window, cx| {
+                        this.active_index = ix;
+                        cx.emit(TabBarEvent::Select(ix));
+                        cx.notify();
+                    }))
                     .child(
-                        Button::new(format!("tab-btn-{}", ix))
-                            .ghost()
-                            .label(tab_title)
-                            .on_click(cx.listener(move |this, _, _window, cx| {
-                                this.active_index = ix;
-                                cx.emit(TabBarEvent::Select(ix));
-                                cx.notify();
-                            })),
+                        div()
+                            .px_1()
+                            .py_0p5()
+                            .rounded_sm()
+                            .text_xs()
+                            .font_weight(FontWeight::BOLD)
+                            .bg(method_bg)
+                            .text_color(method_fg)
+                            .child(method_label),
+                    )
+                    .child(
+                        div()
+                            .text_color(if is_active {
+                                colors.fg
+                            } else {
+                                colors.fg_muted
+                            })
+                            .child(tab_title),
                     )
                     .when(is_dirty, |this| {
-                        this.child(div().size(px(6.)).rounded_full().bg(rgb(0xe06c1b)))
+                        this.child(div().size(px(6.)).rounded_full().bg(colors.accent))
                     })
                     .child(
-                        Button::new(format!("tab-close-{}", ix))
-                            .ghost()
-                            .icon(Icon::new(IconName::Close))
+                        IconButton::new(format!("tab-close-{}", ix), IconName::X)
+                            .size(ControlSize::Sm)
                             .on_click(cx.listener(move |_this, _, _window, cx| {
                                 cx.emit(TabBarEvent::Close(ix));
                             })),
                     )
             }))
     }
-}
-
-fn tab_method_label(method: HttpMethod) -> impl IntoElement {
-    let (text, color) = match method {
-        HttpMethod::GET => ("GET", rgb(0x10b981)),
-        HttpMethod::POST => ("POST", rgb(0x3b82f6)),
-        HttpMethod::PUT => ("PUT", rgb(0xf59e0b)),
-        HttpMethod::DELETE => ("DEL", rgb(0xef4444)),
-        HttpMethod::PATCH => ("PAT", rgb(0x8b5cf6)),
-        HttpMethod::HEAD => ("HEAD", rgb(0x6b7280)),
-        HttpMethod::OPTIONS => ("OPT", rgb(0x6b7280)),
-    };
-
-    div()
-        .font_weight(FontWeight::BOLD)
-        .text_xs()
-        .text_color(color)
-        .child(text)
 }

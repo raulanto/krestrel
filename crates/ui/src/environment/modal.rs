@@ -1,11 +1,10 @@
+use crate::theme::{ThemeExt as _, h_flex, v_flex};
+use ely_gpui_component::buttons::IconButton;
+use ely_gpui_component::primitives::{Icon, IconName};
+use ely_gpui_component::theme::ControlSize;
 use gpui::{
     AppContext, Context, Entity, EventEmitter, FontWeight, IntoElement, ParentElement as _, Render,
     Styled, Subscription, Window, div, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
 };
 use kestrel_core::{EnvVariable, Environment};
 
@@ -198,10 +197,8 @@ impl Render for EnvironmentModal {
             list.set_data(environments, selected_ix, active_id, cx);
         });
 
-        let border_color = cx.theme().border;
-        let bg_color = cx.theme().background;
-        let muted_color = cx.theme().muted;
-        let muted_fg_color = cx.theme().muted_foreground;
+        let theme = cx.theme();
+        let colors = &theme.colors;
 
         // Modal backdrop overlay
         div()
@@ -218,8 +215,8 @@ impl Render for EnvironmentModal {
                     .h(px(520.))
                     .rounded_xl()
                     .border_1()
-                    .border_color(border_color)
-                    .bg(bg_color)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .shadow_lg()
                     .overflow_hidden()
                     // Modal Header
@@ -229,26 +226,26 @@ impl Render for EnvironmentModal {
                             .w_full()
                             .px_4()
                             .border_b_1()
-                            .border_color(border_color)
-                            .bg(muted_color.opacity(0.2))
+                            .border_color(colors.border)
+                            .bg(colors.sunken)
                             .items_center()
                             .justify_between()
                             .child(
                                 h_flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(Icon::new(IconName::Globe).text_color(rgb(0x22c55e)))
+                                    .child(Icon::new(IconName::Globe).color(colors.success))
                                     .child(
                                         div()
                                             .font_weight(FontWeight::BOLD)
                                             .text_sm()
+                                            .text_color(colors.fg)
                                             .child("Gestión de Entornos y Variables"),
                                     ),
                             )
                             .child(
-                                Button::new("close-modal-btn")
-                                    .ghost()
-                                    .icon(Icon::new(IconName::Close))
+                                IconButton::new("close-modal-btn", IconName::X)
+                                    .size(ControlSize::Sm)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.close(cx);
                                     })),
@@ -272,7 +269,7 @@ impl Render for EnvironmentModal {
                                     .justify_center()
                                     .p_8()
                                     .text_sm()
-                                    .text_color(muted_fg_color)
+                                    .text_color(colors.fg_muted)
                                     .child("Selecciona o crea un entorno para gestionar variables")
                                     .into_any_element(),
                             }),

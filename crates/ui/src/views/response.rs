@@ -1,13 +1,8 @@
+use crate::theme::{ThemeExt as _, h_flex, status_color, v_flex};
+use ely_gpui_component::buttons::{Button, ButtonVariant};
 use gpui::{
-    Context, FontWeight, IntoElement, ParentElement as _, Render, Styled, Window, div,
-    prelude::FluentBuilder as _, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    scroll::ScrollableElement as _,
-    v_flex,
+    Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    StatefulInteractiveElement as _, Styled, Window, div, prelude::FluentBuilder as _, rgb,
 };
 use kestrel_http::{
     HttpResponse, Insight, InsightKind, JwtStatus, ResponseIntelligence, TimestampUnit,
@@ -77,18 +72,19 @@ impl Default for ResponsePanel {
 impl Render for ResponsePanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let active_tab = self.active_tab;
         let insights_count = self.insights.len();
 
-        let (status_str, time_str, size_str, is_success) = if self.is_loading {
+        let (status_str, time_str, size_str, status_num) = if self.is_loading {
             (
                 "Enviando...".to_string(),
                 "...".to_string(),
                 "-".to_string(),
-                true,
+                200,
             )
         } else if let Some(_err) = &self.error {
-            ("Error".to_string(), "-".to_string(), "-".to_string(), false)
+            ("Error".to_string(), "-".to_string(), "-".to_string(), 500)
         } else {
             match &self.response {
                 Some(resp) => {
@@ -107,14 +103,13 @@ impl Render for ResponsePanel {
                         format!("{:.2} MB", resp.size.body_bytes as f64 / (1024.0 * 1024.0))
                     };
 
-                    let is_ok = resp.status >= 200 && resp.status < 400;
-                    (status_text, duration_text, size_text, is_ok)
+                    (status_text, duration_text, size_text, resp.status)
                 }
                 None => (
                     "Sin respuesta".to_string(),
                     "-".to_string(),
                     "-".to_string(),
-                    true,
+                    0,
                 ),
             }
         };
@@ -144,7 +139,7 @@ impl Render for ResponsePanel {
                                     div()
                                         .text_xs()
                                         .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(0xe06c1b))
+                                        .text_color(colors.accent)
                                         .child("• Procesando..."),
                                 )
                             }),
@@ -158,17 +153,13 @@ impl Render for ResponsePanel {
                             .child(
                                 div()
                                     .font_weight(FontWeight::BOLD)
-                                    .text_color(if is_success {
-                                        rgb(0x10b981)
-                                    } else {
-                                        rgb(0xef4444)
-                                    })
+                                    .text_color(status_color(status_num, colors))
                                     .child(status_str),
                             )
-                            .child(div().text_color(theme.muted_foreground).child("•"))
-                            .child(div().text_color(theme.muted_foreground).child(time_str))
-                            .child(div().text_color(theme.muted_foreground).child("•"))
-                            .child(div().text_color(theme.muted_foreground).child(size_str)),
+                            .child(div().text_color(colors.fg_muted).child("•"))
+                            .child(div().text_color(colors.fg_muted).child(time_str))
+                            .child(div().text_color(colors.fg_muted).child("•"))
+                            .child(div().text_color(colors.fg_muted).child(size_str)),
                     ),
             )
             // Tab Buttons
@@ -217,13 +208,14 @@ impl Render for ResponsePanel {
             // Body View Canvas
             .child(
                 div()
+                    .id("response-body-scroll")
                     .flex_1()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.background)
+                    .border_color(colors.border)
+                    .bg(colors.bg)
                     .p_3()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(self.render_content_canvas(cx)),
             )
     }
@@ -232,12 +224,13 @@ impl Render for ResponsePanel {
 impl ResponsePanel {
     fn render_content_canvas(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
 
         if self.is_loading {
             return div()
                 .font_family("monospace")
                 .text_xs()
-                .text_color(theme.muted_foreground)
+                .text_color(colors.fg_muted)
                 .child("Ejecutando solicitud en segundo plano...")
                 .into_any_element();
         }
@@ -246,7 +239,7 @@ impl ResponsePanel {
             return div()
                 .font_family("monospace")
                 .text_xs()
-                .text_color(rgb(0xef4444))
+                .text_color(colors.danger)
                 .child(format!("Error al ejecutar la solicitud:\n\n{}", err))
                 .into_any_element();
         }
@@ -255,7 +248,7 @@ impl ResponsePanel {
             return div()
                 .font_family("monospace")
                 .text_xs()
-                .text_color(theme.muted_foreground)
+                .text_color(colors.fg_muted)
                 .child("Envía una solicitud para ver la respuesta aquí...")
                 .into_any_element();
         };
@@ -272,14 +265,14 @@ impl ResponsePanel {
                 div()
                     .font_family("monospace")
                     .text_xs()
-                    .text_color(theme.foreground)
+                    .text_color(colors.fg)
                     .child(text)
                     .into_any_element()
             }
             ResponseTab::Raw => div()
                 .font_family("monospace")
                 .text_xs()
-                .text_color(theme.foreground)
+                .text_color(colors.fg)
                 .child(String::from_utf8_lossy(&resp.body).to_string())
                 .into_any_element(),
             ResponseTab::Headers => v_flex()
@@ -292,17 +285,17 @@ impl ResponsePanel {
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .text_color(theme.foreground)
+                                .text_color(colors.fg)
                                 .child(format!("{}:", k)),
                         )
-                        .child(div().text_color(theme.muted_foreground).child(v.clone()))
+                        .child(div().text_color(colors.fg_muted).child(v.clone()))
                 }))
                 .into_any_element(),
             ResponseTab::Insights => {
                 if self.insights.is_empty() {
                     return div()
                         .text_xs()
-                        .text_color(theme.muted_foreground)
+                        .text_color(colors.fg_muted)
                         .child("No se detectaron hallazgos (JWT o Timestamps) en el cuerpo de la respuesta.")
                         .into_any_element();
                 }
@@ -312,13 +305,13 @@ impl ResponsePanel {
                     .children(self.insights.iter().enumerate().map(|(ix, insight)| {
                         match &insight.kind {
                             InsightKind::Jwt(jwt) => {
-                                let status_str = match jwt.status {
-                                    JwtStatus::Valid => ("Válido", rgb(0x10b981)),
-                                    JwtStatus::Expired => ("Expirado", rgb(0xef4444)),
-                                    JwtStatus::NotYetValid => ("Aún no válido", rgb(0xf59e0b)),
-                                    JwtStatus::NoExpiration => ("Sin expiración", rgb(0x6b7280)),
+                                let (status_label, status_col) = match jwt.status {
+                                    JwtStatus::Valid => ("Válido", colors.success),
+                                    JwtStatus::Expired => ("Expirado", colors.danger),
+                                    JwtStatus::NotYetValid => ("Aún no válido", colors.warning),
+                                    JwtStatus::NoExpiration => ("Sin expiración", colors.fg_muted),
                                     JwtStatus::AlgNone => {
-                                        ("Algoritmo none (Inseguro)", rgb(0xef4444))
+                                        ("Algoritmo none (Inseguro)", colors.danger)
                                     }
                                 };
 
@@ -326,8 +319,8 @@ impl ResponsePanel {
                                     .p_3()
                                     .rounded_md()
                                     .border_1()
-                                    .border_color(theme.border)
-                                    .bg(theme.muted.opacity(0.15))
+                                    .border_color(colors.border)
+                                    .bg(colors.sunken)
                                     .gap_2()
                                     .child(
                                         h_flex().justify_between().items_center().child(
@@ -337,7 +330,7 @@ impl ResponsePanel {
                                                     div()
                                                         .font_weight(FontWeight::BOLD)
                                                         .text_xs()
-                                                        .text_color(rgb(0x3b82f6))
+                                                        .text_color(colors.info)
                                                         .child(format!("#{} Token JWT", ix + 1)),
                                                 )
                                                 .child(
@@ -347,9 +340,9 @@ impl ResponsePanel {
                                                         .rounded_xs()
                                                         .text_xs()
                                                         .font_weight(FontWeight::BOLD)
-                                                        .bg(status_str.1)
+                                                        .bg(status_col)
                                                         .text_color(rgb(0xffffff))
-                                                        .child(status_str.0),
+                                                        .child(status_label),
                                                 ),
                                         ),
                                     )
@@ -358,33 +351,29 @@ impl ResponsePanel {
                                             .gap_1()
                                             .font_family("monospace")
                                             .text_xs()
-                                            .child(div().text_color(theme.muted_foreground).child(
+                                            .child(div().text_color(colors.fg_muted).child(
                                                 format!(
                                                         "Header: {}",
                                                         serde_json::to_string(&jwt.header)
                                                             .unwrap_or_default()
                                                     ),
                                             ))
-                                            .child(div().text_color(theme.foreground).child(
-                                                format!(
+                                            .child(div().text_color(colors.fg).child(format!(
                                                     "Payload: {}",
                                                     serde_json::to_string(&jwt.payload)
                                                         .unwrap_or_default()
-                                                ),
-                                            ))
+                                                )))
                                             .when_some(jwt.exp, |this, exp| {
-                                                this.child(
-                                                    div().text_color(theme.muted_foreground).child(
-                                                        format!(
+                                                this.child(div().text_color(colors.fg_muted).child(
+                                                    format!(
                                                             "Exp (UTC): {}",
                                                             chrono::DateTime::from_timestamp(
                                                                 exp, 0
-                                                            )
-                                                            .map(|dt| dt.to_string())
-                                                            .unwrap_or_default()
-                                                        ),
-                                                    ),
-                                                )
+                                                             )
+                                                             .map(|dt| dt.to_string())
+                                                             .unwrap_or_default()
+                                                         ),
+                                                ))
                                             }),
                                     )
                                     .into_any_element()
@@ -401,8 +390,8 @@ impl ResponsePanel {
                                     .p_3()
                                     .rounded_md()
                                     .border_1()
-                                    .border_color(theme.border)
-                                    .bg(theme.muted.opacity(0.15))
+                                    .border_color(colors.border)
+                                    .bg(colors.sunken)
                                     .gap_1()
                                     .child(
                                         h_flex()
@@ -411,7 +400,7 @@ impl ResponsePanel {
                                                 div()
                                                     .font_weight(FontWeight::BOLD)
                                                     .text_xs()
-                                                    .text_color(rgb(0x8b5cf6))
+                                                    .text_color(colors.accent)
                                                     .child(format!(
                                                         "#{} Timestamp Unix ({})",
                                                         ix + 1,
@@ -422,7 +411,7 @@ impl ResponsePanel {
                                                 div()
                                                     .text_xs()
                                                     .font_family("monospace")
-                                                    .text_color(theme.foreground)
+                                                    .text_color(colors.fg)
                                                     .child(ts.raw.clone()),
                                             ),
                                     )
@@ -430,7 +419,7 @@ impl ResponsePanel {
                                         div()
                                             .font_family("monospace")
                                             .text_xs()
-                                            .text_color(theme.muted_foreground)
+                                            .text_color(colors.fg_muted)
                                             .child(format!("Fecha legible: {}", ts.formatted_utc)),
                                     )
                                     .into_any_element()
@@ -449,10 +438,11 @@ fn render_tab_button(
     is_active: bool,
     on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
 ) -> Button {
-    let btn = Button::new(id).label(label.to_string()).on_click(on_click);
+    let mut btn = Button::new(id, label.to_string()).on_click(on_click);
     if is_active {
-        btn.outline()
+        btn = btn.variant(ButtonVariant::Outline);
     } else {
-        btn.ghost()
+        btn = btn.variant(ButtonVariant::Ghost);
     }
+    btn
 }

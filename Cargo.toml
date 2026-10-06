@@ -25,9 +25,13 @@ kestrel-http = { path = "crates/http" }
 kestrel-json-graph = { path = "crates/json-graph" }
 kestrel-ui = { path = "crates/ui" }
 
-# GPUI and UI stack pinned to gpui-kit 0.7.1
-gpui-kit = "0.7.1"
-gpui = { package = "gpui-pre", version = "=0.3.8" }
+# GPUI and UI stack (Ely GPUI Components + Zed GPUI)
+ely-gpui-component = { git = "https://github.com/ZacharyZhang-NY/Ely-GPUI-Components" }
+gpui = { git = "https://github.com/zed-industries/zed", rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1a28cff4b409169bac058bca40dfbfeb7621d19b", features = ["font-kit", "wayland", "x11"] }
+
+
+
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

@@ -1,16 +1,14 @@
 use std::collections::HashSet;
 
+use crate::theme::{ThemeExt as _, h_flex, http_method_badge, v_flex};
+use ely_gpui_component::buttons::IconButton;
+use ely_gpui_component::forms::{Input, InputEvent, TextInput};
+use ely_gpui_component::primitives::{Icon, IconName};
+use ely_gpui_component::theme::ControlSize;
 use gpui::{
-    AppContext, Context, Entity, FontWeight, IntoElement, ParentElement as _, Render, SharedString,
-    Styled, Subscription, Window, div, prelude::FluentBuilder as _, px, rgb,
-};
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement as _,
-    v_flex,
+    AppContext, Context, Entity, FontWeight, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled,
+    Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 use kestrel_core::{Collection, CollectionItem, Folder, HttpMethod};
 
@@ -24,7 +22,7 @@ pub enum SidebarEvent {
 
 pub struct Sidebar {
     collection: Option<Collection>,
-    search_input: Entity<InputState>,
+    search_input: Entity<TextInput>,
     search_query: String,
     selected_request_id: Option<String>,
     collapsed_folders: HashSet<String>,
@@ -33,15 +31,15 @@ pub struct Sidebar {
 
 impl Sidebar {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_input = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Buscar solicitudes o carpetas..."));
+        let search_input =
+            cx.new(|cx| TextInput::new(window, cx).placeholder("Buscar solicitudes o carpetas..."));
 
         let sub = cx.subscribe_in(&search_input, window, {
             let search_input = search_input.clone();
             move |this, _, ev: &InputEvent, _window, cx| {
-                if let InputEvent::Change = ev {
-                    let val = search_input.read(cx).value();
-                    this.search_query = val.to_string();
+                if let InputEvent::Changed = ev {
+                    let val = search_input.read(cx).text().to_string();
+                    this.search_query = val;
                     cx.notify();
                 }
             }
@@ -115,6 +113,7 @@ impl gpui::EventEmitter<SidebarEvent> for Sidebar {}
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let query = self.search_query.clone();
 
         let collection_name = self
@@ -127,16 +126,16 @@ impl Render for Sidebar {
             .w(px(280.))
             .h_full()
             .border_r_1()
-            .border_color(theme.border)
-            .bg(theme.background)
+            .border_color(colors.border)
+            .bg(colors.bg)
             // 1. Sidebar Header: Collection title & Quick Search input
             .child(
                 v_flex()
                     .p_3()
                     .gap_2p5()
                     .border_b_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted.opacity(0.12))
+                    .border_color(colors.border)
+                    .bg(colors.sunken)
                     .child(
                         h_flex()
                             .items_center()
@@ -146,14 +145,12 @@ impl Render for Sidebar {
                                 h_flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(
-                                        Icon::new(IconName::FolderOpen).text_color(rgb(0xe06c1b)),
-                                    )
+                                    .child(Icon::new(IconName::FolderOpen).color(colors.warning))
                                     .child(
                                         div()
                                             .font_weight(FontWeight::BOLD)
                                             .text_sm()
-                                            .text_color(theme.foreground)
+                                            .text_color(colors.fg)
                                             .text_ellipsis()
                                             .child(collection_name),
                                     ),
@@ -163,28 +160,27 @@ impl Render for Sidebar {
                                     .items_center()
                                     .gap_1()
                                     .child(
-                                        Button::new("btn-toggle-folders")
-                                            .ghost()
-                                            .tooltip("Colapsar / Expandir carpetas")
-                                            .icon(Icon::new(IconName::ChevronsUpDown))
-                                            .on_click(cx.listener(|this, _, _, cx| {
+                                        IconButton::new(
+                                            "btn-toggle-folders",
+                                            IconName::ChevronsUpDown,
+                                        )
+                                        .size(ControlSize::Sm)
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| {
                                                 this.toggle_all_folders(cx);
-                                            })),
+                                            }),
+                                        ),
                                     )
                                     .child(
-                                        Button::new("btn-open-col")
-                                            .ghost()
-                                            .tooltip("Recargar / Abrir colección...")
-                                            .icon(Icon::new(IconName::FolderOpen))
+                                        IconButton::new("btn-open-col", IconName::FolderOpen)
+                                            .size(ControlSize::Sm)
                                             .on_click(cx.listener(|_this, _, _, cx| {
                                                 cx.emit(SidebarEvent::OpenCollection);
                                             })),
                                     )
                                     .child(
-                                        Button::new("btn-save-col")
-                                            .ghost()
-                                            .tooltip("Guardar colección a disco")
-                                            .icon(Icon::new(IconName::HardDrive))
+                                        IconButton::new("btn-save-col", IconName::HardDrive)
+                                            .size(ControlSize::Sm)
                                             .on_click(cx.listener(|_this, _, _, cx| {
                                                 cx.emit(SidebarEvent::SaveCollection);
                                             })),
@@ -194,15 +190,16 @@ impl Render for Sidebar {
                     .child(
                         Input::new(&self.search_input)
                             .prefix(Icon::new(IconName::Search))
-                            .cleanable(true),
+                            .clearable(),
                     ),
             )
             // 2. Sidebar Tree Content Canvas
             .child(
                 div()
+                    .id("sidebar-tree-scroll")
                     .flex_1()
                     .p_2()
-                    .overflow_y_scrollbar()
+                    .overflow_y_scroll()
                     .child(self.render_tree_content(&query, cx)),
             )
     }
@@ -210,12 +207,14 @@ impl Render for Sidebar {
 
 impl Sidebar {
     fn render_tree_content(&self, query: &str, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let colors = &theme.colors;
         let Some(col) = &self.collection else {
             return v_flex()
                 .p_4()
                 .items_center()
                 .text_sm()
-                .text_color(cx.theme().muted_foreground)
+                .text_color(colors.fg_muted)
                 .child("No hay colección cargada")
                 .into_any_element();
         };
@@ -239,7 +238,7 @@ impl Sidebar {
                     .p_4()
                     .items_center()
                     .text_xs()
-                    .text_color(cx.theme().muted_foreground)
+                    .text_color(colors.fg_muted)
                     .child(format!("No hay resultados para \"{}\"", query))
                     .into_any_element()
             } else {
@@ -259,8 +258,8 @@ impl Sidebar {
                                 .gap_1p5()
                                 .items_center()
                                 .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(Icon::new(IconName::Folder).text_color(rgb(0xe06c1b)))
+                                .text_color(colors.fg_muted)
+                                .child(Icon::new(IconName::Folder).color(colors.warning))
                                 .child(
                                     div()
                                         .font_weight(FontWeight::MEDIUM)
@@ -282,94 +281,85 @@ impl Sidebar {
                             let url_preview = f_item.url.clone();
 
                             h_flex()
+                                .id(format!("search-req-{}", req_id))
                                 .w_full()
                                 .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .cursor_pointer()
+                                .when(is_selected, |this| this.bg(colors.active))
+                                .when(!is_selected, |this| this.hover(|s| s.bg(colors.hover)))
+                                .on_click(cx.listener({
+                                    let r_id = req_id.clone();
+                                    move |this, _, _, cx| {
+                                        this.selected_request_id = Some(r_id.clone());
+                                        cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                                        cx.notify();
+                                    }
+                                }))
                                 .child(
-                                    Button::new(format!("search-req-{}", req_id))
-                                        .ghost()
+                                    v_flex()
                                         .w_full()
-                                        .on_click(cx.listener({
-                                            let r_id = req_id.clone();
-                                            move |this, _, _, cx| {
-                                                this.selected_request_id = Some(r_id.clone());
-                                                cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
-                                                cx.notify();
-                                            }
-                                        }))
+                                        .gap_0p5()
                                         .child(
-                                            v_flex()
+                                            h_flex()
                                                 .w_full()
-                                                .py_1()
-                                                .gap_0p5()
+                                                .items_center()
+                                                .justify_between()
+                                                .gap_2()
                                                 .child(
                                                     h_flex()
-                                                        .w_full()
                                                         .items_center()
-                                                        .justify_between()
                                                         .gap_2()
+                                                        .flex_1()
+                                                        .child(method_badge(method, cx))
                                                         .child(
-                                                            h_flex()
-                                                                .items_center()
-                                                                .gap_2()
-                                                                .flex_1()
-                                                                .child(method_badge(method))
-                                                                .child(
-                                                                    div()
-                                                                        .text_xs()
-                                                                        .font_weight(
-                                                                            if is_selected {
-                                                                                FontWeight::SEMIBOLD
-                                                                            } else {
-                                                                                FontWeight::NORMAL
-                                                                            },
-                                                                        )
-                                                                        .text_color(
-                                                                            cx.theme().foreground,
-                                                                        )
-                                                                        .when(is_selected, |this| {
-                                                                            this.text_color(rgb(
-                                                                                0xe06c1b,
-                                                                            ))
-                                                                        })
-                                                                        .text_ellipsis()
-                                                                        .child(req_name),
-                                                                ),
-                                                        )
-                                                        .when(is_selected, |this| {
-                                                            this.child(
-                                                                div()
-                                                                    .size(px(6.))
-                                                                    .rounded_full()
-                                                                    .bg(rgb(0xe06c1b)),
-                                                            )
-                                                        }),
+                                                            div()
+                                                                .text_xs()
+                                                                .font_weight(if is_selected {
+                                                                    FontWeight::SEMIBOLD
+                                                                } else {
+                                                                    FontWeight::NORMAL
+                                                                })
+                                                                .text_color(if is_selected {
+                                                                    colors.accent
+                                                                } else {
+                                                                    colors.fg
+                                                                })
+                                                                .text_ellipsis()
+                                                                .child(req_name),
+                                                        ),
                                                 )
-                                                .when_some(breadcrumb, |this, bc| {
+                                                .when(is_selected, |this| {
                                                     this.child(
                                                         div()
-                                                            .pl_6()
-                                                            .text_xs()
-                                                            .text_color(cx.theme().muted_foreground)
-                                                            .text_ellipsis()
-                                                            .child(bc),
-                                                    )
-                                                })
-                                                .when_some(url_preview, |this, u| {
-                                                    this.child(
-                                                        div()
-                                                            .pl_6()
-                                                            .text_xs()
-                                                            .font_family("monospace")
-                                                            .text_color(
-                                                                cx.theme()
-                                                                    .muted_foreground
-                                                                    .opacity(0.8),
-                                                            )
-                                                            .text_ellipsis()
-                                                            .child(u),
+                                                            .size(px(6.))
+                                                            .rounded_full()
+                                                            .bg(colors.accent),
                                                     )
                                                 }),
-                                        ),
+                                        )
+                                        .when_some(breadcrumb, |this, bc| {
+                                            this.child(
+                                                div()
+                                                    .pl_6()
+                                                    .text_xs()
+                                                    .text_color(colors.fg_muted)
+                                                    .text_ellipsis()
+                                                    .child(bc),
+                                            )
+                                        })
+                                        .when_some(url_preview, |this, u| {
+                                            this.child(
+                                                div()
+                                                    .pl_6()
+                                                    .text_xs()
+                                                    .font_family("monospace")
+                                                    .text_color(colors.fg_muted)
+                                                    .text_ellipsis()
+                                                    .child(u),
+                                            )
+                                        }),
                                 )
                                 .into_any_element()
                         }
@@ -395,6 +385,7 @@ impl Sidebar {
                     .into_any_element()
             }
             CollectionItem::ErrorNode(err) => {
+                let theme = cx.theme();
                 let indent = (depth as f32) * 12.0;
 
                 let title = format!(
@@ -412,7 +403,7 @@ impl Sidebar {
                     .py_1()
                     .pl(gpui::px(indent + 8.0))
                     .text_xs()
-                    .text_color(gpui::rgb(0xef4444))
+                    .text_color(theme.colors.danger)
                     .child(title)
                     .into_any_element()
             }
@@ -426,6 +417,7 @@ impl Sidebar {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = &theme.colors;
         let is_collapsed = self.collapsed_folders.contains(&folder.id);
         let folder_id = folder.id.clone();
         let indent = (depth as f32) * 12.0;
@@ -445,50 +437,50 @@ impl Sidebar {
         v_flex()
             .w_full()
             .child(
-                h_flex().w_full().pl(px(indent + 8.)).pr_2().child(
-                    Button::new(format!("folder-btn-{}", folder_id))
-                        .ghost()
-                        .w_full()
-                        .on_click(cx.listener({
-                            let f_id = folder_id.clone();
-                            move |this, _, _, cx| {
-                                this.toggle_folder(&f_id, cx);
-                            }
-                        }))
-                        .child(
-                            h_flex()
-                                .w_full()
-                                .items_center()
-                                .justify_between()
-                                .gap_2()
-                                .py_0p5()
-                                .child(
-                                    h_flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .flex_1()
-                                        .child(
-                                            Icon::new(chevron_name)
-                                                .text_color(theme.muted_foreground),
-                                        )
-                                        .child(Icon::new(icon_name).text_color(rgb(0xe06c1b)))
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .font_weight(FontWeight::MEDIUM)
-                                                .text_color(theme.foreground)
-                                                .text_ellipsis()
-                                                .child(folder.name.clone()),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(theme.muted_foreground)
-                                        .child(folder.items.len().to_string()),
-                                ),
-                        ),
-                ),
+                h_flex()
+                    .id(format!("folder-btn-{}", folder_id))
+                    .w_full()
+                    .pl(px(indent + 8.))
+                    .pr_2()
+                    .py_1()
+                    .rounded_md()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(colors.hover))
+                    .on_click(cx.listener({
+                        let f_id = folder_id.clone();
+                        move |this, _, _, cx| {
+                            this.toggle_folder(&f_id, cx);
+                        }
+                    }))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .justify_between()
+                            .gap_2()
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .flex_1()
+                                    .child(Icon::new(chevron_name).color(colors.fg_muted))
+                                    .child(Icon::new(icon_name).color(colors.warning))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(colors.fg)
+                                            .text_ellipsis()
+                                            .child(folder.name.clone()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(colors.fg_muted)
+                                    .child(folder.items.len().to_string()),
+                            ),
+                    ),
             )
             .when(!is_collapsed, |this| {
                 this.children(folder.items.iter().map(|child_item| {
@@ -507,67 +499,69 @@ impl Sidebar {
         depth: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let theme = cx.theme();
+        let colors = &theme.colors;
         let req_id = id.to_string();
         let req_name = name.to_string();
         let indent = (depth as f32) * 12.0;
 
-        h_flex().w_full().pl(px(indent + 16.)).pr_2().child(
-            Button::new(format!("open-req-{}", req_id))
-                .ghost()
-                .w_full()
-                .on_click(cx.listener({
-                    let r_id = req_id.clone();
-                    move |this, _, _, cx| {
-                        this.selected_request_id = Some(r_id.clone());
-                        cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
-                        cx.notify();
-                    }
-                }))
-                .child(
-                    h_flex()
-                        .w_full()
-                        .items_center()
-                        .justify_between()
-                        .gap_2()
-                        .py_0p5()
-                        .child(
-                            h_flex()
-                                .items_center()
-                                .gap_2()
-                                .flex_1()
-                                .child(method_badge(method))
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_weight(if is_selected {
-                                            FontWeight::SEMIBOLD
-                                        } else {
-                                            FontWeight::NORMAL
-                                        })
-                                        .text_color(cx.theme().foreground)
-                                        .when(is_selected, |this| this.text_color(rgb(0xe06c1b)))
-                                        .text_ellipsis()
-                                        .child(req_name),
-                                ),
-                        )
-                        .when(is_selected, |this| {
-                            this.child(div().size(px(6.)).rounded_full().bg(rgb(0xe06c1b)))
-                        }),
-                ),
-        )
+        h_flex()
+            .id(format!("open-req-{}", req_id))
+            .w_full()
+            .pl(px(indent + 16.))
+            .pr_2()
+            .py_1()
+            .rounded_md()
+            .cursor_pointer()
+            .when(is_selected, |this| this.bg(colors.active))
+            .when(!is_selected, |this| this.hover(|s| s.bg(colors.hover)))
+            .on_click(cx.listener({
+                let r_id = req_id.clone();
+                move |this, _, _, cx| {
+                    this.selected_request_id = Some(r_id.clone());
+                    cx.emit(SidebarEvent::SelectRequest(r_id.clone()));
+                    cx.notify();
+                }
+            }))
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .flex_1()
+                            .child(method_badge(method, cx))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(if is_selected {
+                                        FontWeight::SEMIBOLD
+                                    } else {
+                                        FontWeight::NORMAL
+                                    })
+                                    .text_color(if is_selected {
+                                        colors.accent
+                                    } else {
+                                        colors.fg
+                                    })
+                                    .text_ellipsis()
+                                    .child(req_name),
+                            ),
+                    )
+                    .when(is_selected, |this| {
+                        this.child(div().size(px(6.)).rounded_full().bg(colors.accent))
+                    }),
+            )
     }
 }
 
-fn method_badge(method: HttpMethod) -> impl IntoElement {
-    let (text, color_bg, color_fg) = match method {
-        HttpMethod::GET => ("GET", rgb(0x10b981), rgb(0xffffff)),
-        HttpMethod::POST => ("POST", rgb(0x3b82f6), rgb(0xffffff)),
-        HttpMethod::PUT => ("PUT", rgb(0xf59e0b), rgb(0xffffff)),
-        HttpMethod::DELETE => ("DEL", rgb(0xef4444), rgb(0xffffff)),
-        HttpMethod::PATCH => ("PAT", rgb(0x8b5cf6), rgb(0xffffff)),
-        HttpMethod::HEAD => ("HEAD", rgb(0x6b7280), rgb(0xffffff)),
-        HttpMethod::OPTIONS => ("OPT", rgb(0x6b7280), rgb(0xffffff)),
-    };
+fn method_badge(method: HttpMethod, cx: &Context<Sidebar>) -> impl IntoElement {
+    let theme = cx.theme();
+    let (bg, fg, label) = http_method_badge(method, &theme.colors);
 
     div()
         .px_1p5()
@@ -575,7 +569,7 @@ fn method_badge(method: HttpMethod) -> impl IntoElement {
         .rounded_xs()
         .text_xs()
         .font_weight(FontWeight::BOLD)
-        .bg(color_bg)
-        .text_color(color_fg)
-        .child(SharedString::from(text))
+        .bg(bg)
+        .text_color(fg)
+        .child(SharedString::from(label))
 }
