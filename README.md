@@ -88,7 +88,7 @@ kestrel/
 - [x] Pestañas de solicitud y editor de body
 - [x] Entornos y variables
 - [x] Cliente HTTP y GraphQL
-- [ ] Panel de respuesta (Pretty / Raw / Headers)
+- [x] Panel de respuesta (Pretty / Raw / Headers)
 - [ ] Inteligencia de respuesta (JWT, timestamps)
 - [ ] Importadores Postman y Yaak
 - [ ] Visualizador de JSON en diagrama
