@@ -4,12 +4,14 @@ use gpui::{
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, PathBuilder,
     Pixels, Render, ScrollWheelEvent, Styled, Window, canvas, div, point, px,
 };
-use kestrel_json_graph::{ExportError, Rect, SvgTheme, generate_svg, render_svg_to_png};
+use kestrel_json_graph::{
+    DisplayMode, ExportError, Rect, SvgTheme, generate_svg_with_mode, render_svg_to_png,
+};
 
 use super::bottom_bar::DiagramBottomBar;
 use super::node_card::NodeCardView;
-use super::state::DiagramState;
-use super::toolbar::DiagramToolbar;
+use super::state::{DiagramState, DiagramViewMode};
+use super::toolbar::{DiagramToolbar, DiagramToolbarActions};
 use crate::theme::{ThemeExt as _, v_flex};
 
 pub struct DiagramView {
@@ -44,7 +46,11 @@ impl DiagramView {
         } else {
             SvgTheme::light()
         };
-        Some(generate_svg(layout, graph, &theme))
+        let mode = match self.state.view_mode {
+            DiagramViewMode::Types => DisplayMode::Types,
+            DiagramViewMode::Data => DisplayMode::Values,
+        };
+        Some(generate_svg_with_mode(layout, graph, &theme, mode))
     }
 
     pub fn export_png(&self, is_dark: bool, scale: f32) -> Result<Vec<u8>, ExportError> {
@@ -111,6 +117,7 @@ impl Render for DiagramView {
         let pan_x = self.state.pan_x;
         let pan_y = self.state.pan_y;
         let zoom = self.state.zoom;
+        let view_mode = self.state.view_mode;
         let selected_id = self.state.selected_node_id.clone();
         let total_nodes = graph.total_nodes;
 
@@ -138,6 +145,7 @@ impl Render for DiagramView {
                         graph_node.clone(),
                         layout_node.clone(),
                         is_selected,
+                        view_mode,
                         cx.listener(move |this, _ev, _window, cx| {
                             this.state.select_node(Some(node_id_clone1.clone()));
                             cx.notify();
@@ -185,7 +193,16 @@ impl Render for DiagramView {
                     .left(px(12.))
                     .child(DiagramToolbar::new(
                         zoom,
-                        super::toolbar::DiagramToolbarActions {
+                        view_mode,
+                        DiagramToolbarActions {
+                            on_select_types: cx.listener(|this, _, _window, cx| {
+                                this.state.set_view_mode(DiagramViewMode::Types);
+                                cx.notify();
+                            }),
+                            on_select_data: cx.listener(|this, _, _window, cx| {
+                                this.state.set_view_mode(DiagramViewMode::Data);
+                                cx.notify();
+                            }),
                             on_zoom_in: cx.listener(|this, _, _window, cx| {
                                 this.state.zoom_in();
                                 cx.notify();

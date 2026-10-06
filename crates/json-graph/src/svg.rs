@@ -56,6 +56,13 @@ impl SvgTheme {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DisplayMode {
+    #[default]
+    Types,
+    Values,
+}
+
 pub fn escape_xml(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -65,6 +72,15 @@ pub fn escape_xml(s: &str) -> String {
 }
 
 pub fn generate_svg(layout: &Layout, graph: &Graph, theme: &SvgTheme) -> String {
+    generate_svg_with_mode(layout, graph, theme, DisplayMode::Types)
+}
+
+pub fn generate_svg_with_mode(
+    layout: &Layout,
+    graph: &Graph,
+    theme: &SvgTheme,
+    mode: DisplayMode,
+) -> String {
     let padding = 32.0;
     let width = layout.bounds.width + padding * 2.0;
     let height = layout.bounds.height + padding * 2.0;
@@ -147,6 +163,11 @@ pub fn generate_svg(layout: &Layout, graph: &Graph, theme: &SvgTheme) -> String 
                         PrimitiveType::Null => &theme.text_null,
                     };
 
+                    let val_display = match mode {
+                        DisplayMode::Types => prop.value.primitive_type().name().to_string(),
+                        DisplayMode::Values => prop.value.display_text(),
+                    };
+
                     svg.push_str(&format!(
                         r#"<text x="{x_pad}" y="{row_y}" font-size="11"><tspan fill="{text_muted}">{key}: </tspan><tspan fill="{val_color}">{val}</tspan></text>
 "#,
@@ -155,7 +176,7 @@ pub fn generate_svg(layout: &Layout, graph: &Graph, theme: &SvgTheme) -> String 
                         text_muted = theme.text_muted,
                         key = escape_xml(&prop.key),
                         val_color = val_color,
-                        val = escape_xml(&prop.value.display_text()),
+                        val = escape_xml(&val_display),
                     ));
                     current_row_y += 20.0;
                 }
@@ -284,12 +305,17 @@ mod tests {
             LayoutOptions::default(),
         );
 
-        let svg = generate_svg(&layout, &graph, &SvgTheme::dark());
+        let svg_values =
+            generate_svg_with_mode(&layout, &graph, &SvgTheme::dark(), DisplayMode::Values);
 
-        assert!(svg.starts_with("<svg"));
-        assert!(svg.ends_with("</svg>"));
-        assert!(svg.contains("Super hero squad"));
-        assert!(svg.contains("Molecule Man"));
-        assert!(svg.contains("Radiation resistance"));
+        assert!(svg_values.starts_with("<svg"));
+        assert!(svg_values.ends_with("</svg>"));
+        assert!(svg_values.contains("Super hero squad"));
+        assert!(svg_values.contains("Molecule Man"));
+        assert!(svg_values.contains("Radiation resistance"));
+
+        let svg_types = generate_svg(&layout, &graph, &SvgTheme::dark());
+        assert!(svg_types.contains("squadName"));
+        assert!(svg_types.contains("string"));
     }
 }

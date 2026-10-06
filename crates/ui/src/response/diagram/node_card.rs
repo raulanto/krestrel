@@ -5,6 +5,7 @@ use gpui::{
 };
 use kestrel_json_graph::{GraphNode, LayoutNode, NodeKind, PropertyRow};
 
+use super::state::DiagramViewMode;
 use crate::theme::{ThemeExt as _, h_flex, syntax_type_color, v_flex};
 
 #[derive(IntoElement)]
@@ -16,6 +17,7 @@ where
     node: GraphNode,
     layout_node: LayoutNode,
     is_selected: bool,
+    view_mode: DiagramViewMode,
     on_select: F1,
     on_toggle_collapse: F2,
 }
@@ -29,6 +31,7 @@ where
         node: GraphNode,
         layout_node: LayoutNode,
         is_selected: bool,
+        view_mode: DiagramViewMode,
         on_select: F1,
         on_toggle_collapse: F2,
     ) -> Self {
@@ -36,6 +39,7 @@ where
             node,
             layout_node,
             is_selected,
+            view_mode,
             on_select,
             on_toggle_collapse,
         }
@@ -54,6 +58,7 @@ where
         let is_selected = self.is_selected;
         let is_collapsed = self.layout_node.is_collapsed;
         let has_children = self.layout_node.has_children;
+        let view_mode = self.view_mode;
 
         let border_color: Hsla = if is_selected {
             colors.accent
@@ -73,12 +78,26 @@ where
             NodeKind::ObjectCard => {
                 if has_children {
                     Some(format!("{} hijos", self.node.children.len()))
+                } else if view_mode == DiagramViewMode::Types {
+                    Some("object".to_string())
                 } else {
                     None
                 }
             }
             NodeKind::ArrayContainer { count } => Some(format!("array[{}]", count)),
-            NodeKind::PrimitiveLeaf => Some("valor".to_string()),
+            NodeKind::PrimitiveLeaf => {
+                if view_mode == DiagramViewMode::Types {
+                    let type_name = self
+                        .node
+                        .properties
+                        .first()
+                        .map(|p| p.value.primitive_type().name())
+                        .unwrap_or("valor");
+                    Some(type_name.to_string())
+                } else {
+                    Some("valor".to_string())
+                }
+            }
             NodeKind::ArrayChunk { start, end } => Some(format!("[{}..{}]", start, end)),
         };
 
@@ -160,7 +179,7 @@ where
                             self.node
                                 .properties
                                 .iter()
-                                .map(|prop| render_property_row(prop, colors)),
+                                .map(|prop| render_property_row(prop, view_mode, colors)),
                         )
                         .children(if self.node.truncated_rows > 0 {
                             Some(
@@ -180,10 +199,16 @@ where
 
 fn render_property_row(
     prop: &PropertyRow,
+    view_mode: DiagramViewMode,
     colors: &ely_gpui_component::theme::Palette,
 ) -> impl IntoElement {
     let type_name = prop.value.primitive_type().name();
     let val_color = syntax_type_color(type_name, colors);
+
+    let val_display = match view_mode {
+        DiagramViewMode::Types => type_name.to_string(),
+        DiagramViewMode::Data => prop.value.display_text(),
+    };
 
     h_flex()
         .w_full()
@@ -202,6 +227,6 @@ fn render_property_row(
                 .text_color(val_color)
                 .overflow_hidden()
                 .whitespace_nowrap()
-                .child(prop.value.display_text()),
+                .child(val_display),
         )
 }

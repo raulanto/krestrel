@@ -4,11 +4,19 @@ use kestrel_json_graph::{
 use serde_json::Value;
 use std::collections::HashSet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiagramViewMode {
+    #[default]
+    Types,
+    Data,
+}
+
 #[derive(Debug, Clone)]
 pub struct DiagramState {
     pub pan_x: f32,
     pub pan_y: f32,
     pub zoom: f32,
+    pub view_mode: DiagramViewMode,
     pub is_dragging: bool,
     pub drag_start_mouse: Option<(f32, f32)>,
     pub drag_start_pan: (f32, f32),
@@ -26,6 +34,7 @@ impl Default for DiagramState {
             pan_x: 40.0,
             pan_y: 40.0,
             zoom: 1.0,
+            view_mode: DiagramViewMode::Types,
             is_dragging: false,
             drag_start_mouse: None,
             drag_start_pan: (40.0, 40.0),
@@ -180,5 +189,33 @@ impl DiagramState {
     pub fn end_drag(&mut self) {
         self.is_dragging = false;
         self.drag_start_mouse = None;
+    }
+
+    pub fn set_view_mode(&mut self, mode: DiagramViewMode) {
+        self.view_mode = mode;
+    }
+
+    pub fn toggle_view_mode(&mut self) {
+        self.view_mode = match self.view_mode {
+            DiagramViewMode::Types => DiagramViewMode::Data,
+            DiagramViewMode::Data => DiagramViewMode::Types,
+        };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diagram_state_view_mode() {
+        let mut state = DiagramState::new();
+        assert_eq!(state.view_mode, DiagramViewMode::Types);
+
+        state.toggle_view_mode();
+        assert_eq!(state.view_mode, DiagramViewMode::Data);
+
+        state.set_view_mode(DiagramViewMode::Types);
+        assert_eq!(state.view_mode, DiagramViewMode::Types);
     }
 }
