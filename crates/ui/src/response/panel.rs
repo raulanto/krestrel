@@ -21,6 +21,7 @@ use super::headers_view::HeadersView;
 use super::raw_view::RawView;
 use super::states::{EmptyBodyState, FailedState, IdleState, LoadingState};
 use super::status_bar::StatusBar;
+use super::tree_table_view::TreeTableView;
 use crate::theme::{ThemeExt as _, h_flex, v_flex};
 
 const LARGE_BODY_THRESHOLD_BYTES: usize = 5 * 1024 * 1024; // 5 MB
@@ -29,6 +30,7 @@ const LARGE_BODY_THRESHOLD_BYTES: usize = 5 * 1024 * 1024; // 5 MB
 pub enum ResponseTab {
     Pretty,
     Raw,
+    Table,
     Headers,
     Insights,
 }
@@ -350,6 +352,20 @@ impl Render for ResponsePanel {
                                         cx.notify();
                                     })),
                             )
+                            // Table Tab (TreeTable)
+                            .child(
+                                Button::new("tab-table", "TreeTable")
+                                    .variant(if active_tab == ResponseTab::Table {
+                                        ButtonVariant::Secondary
+                                    } else {
+                                        ButtonVariant::Ghost
+                                    })
+                                    .size(ControlSize::Sm)
+                                    .on_click(cx.listener(|this, _, _window, cx| {
+                                        this.active_tab = ResponseTab::Table;
+                                        cx.notify();
+                                    })),
+                            )
                             // Headers Tab
                             .child(
                                 Button::new("tab-headers", "Headers")
@@ -625,6 +641,11 @@ impl ResponsePanel {
                             .child(self.code_editor.clone())
                             .children(find_widget)
                             .into_any_element()
+                    }
+                    ResponseTab::Table => {
+                        let (decoded, _lossy) =
+                            decode_body(&resp.body, resp.content_type.as_deref());
+                        TreeTableView::new(&decoded).into_any_element()
                     }
                     ResponseTab::Headers => HeadersView::new(
                         resp.headers.clone(),
