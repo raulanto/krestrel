@@ -12,6 +12,7 @@ gpui.workspace = true
 ely-gpui-component.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+bytes.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 chrono.workspace = true

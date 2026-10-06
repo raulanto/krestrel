@@ -42,6 +42,7 @@ serde_yaml_ng = "0.10"
 # Async & Networking
 tokio = { version = "1.43", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls-native-roots"] }
+bytes = "1.10"
 url = "2.5"
 
 # Errors & Diagnostics

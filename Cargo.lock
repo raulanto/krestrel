@@ -3566,6 +3566,7 @@ dependencies = [
 name = "kestrel-ui"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "chrono",
  "ely-gpui-component",
  "gpui",

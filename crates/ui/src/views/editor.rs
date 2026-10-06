@@ -514,12 +514,17 @@ impl Render for RequestEditor {
         let headers_count = self.request.as_ref().map(|r| r.headers.len()).unwrap_or(0);
 
         v_flex()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
             .size_full()
+            .overflow_hidden()
             .p_4()
             .gap_4()
             // 1. Breadcrumbs / Title bar with Save status
             .child(
                 h_flex()
+                    .flex_shrink_0()
                     .items_center()
                     .justify_between()
                     .w_full()
@@ -561,6 +566,7 @@ impl Render for RequestEditor {
             // 2. URL Bar: Method Selector Pill + URL Input + Send Button
             .child(
                 h_flex()
+                    .flex_shrink_0()
                     .items_center()
                     .gap_2()
                     .w_full()
@@ -609,6 +615,7 @@ impl Render for RequestEditor {
             // 3. Sub-tabs Navigation Bar: Path, Query, Headers, Body, Authentication
             .child(
                 h_flex()
+                    .flex_shrink_0()
                     .items_center()
                     .gap_2()
                     .border_b_1()
@@ -661,15 +668,22 @@ impl Render for RequestEditor {
                     )),
             )
             // 4. Tab Body Content Area
-            .child(match active_tab {
-                EditorTab::Body => self
-                    .render_body_view(selected_format, cx)
-                    .into_any_element(),
-                EditorTab::Headers => self.render_headers_view(cx).into_any_element(),
-                EditorTab::Query => self.render_query_view(cx).into_any_element(),
-                EditorTab::Path => self.render_path_view(cx).into_any_element(),
-                EditorTab::Authentication => self.render_auth_view(cx).into_any_element(),
-            })
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .overflow_hidden()
+                    .child(match active_tab {
+                        EditorTab::Body => self
+                            .render_body_view(selected_format, cx)
+                            .into_any_element(),
+                        EditorTab::Headers => self.render_headers_view(cx).into_any_element(),
+                        EditorTab::Query => self.render_query_view(cx).into_any_element(),
+                        EditorTab::Path => self.render_path_view(cx).into_any_element(),
+                        EditorTab::Authentication => self.render_auth_view(cx).into_any_element(),
+                    }),
+            )
     }
 }
 

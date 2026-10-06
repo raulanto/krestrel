@@ -15,8 +15,8 @@ use kestrel_http::HttpClient;
 use kestrel_storage::{load_collection_file, save_collection_file};
 use kestrel_ui::theme::{ThemeExt as _, h_flex, v_flex};
 use kestrel_ui::views::{
-    EditorEvent, EnvironmentEvent, EnvironmentModal, RequestEditor, ResponsePanel, Sidebar,
-    SidebarEvent, TabBarEvent, TabItem, WorkspaceTabBar,
+    EditorEvent, EnvironmentEvent, EnvironmentModal, RequestEditor, ResponseEvent, ResponsePanel,
+    Sidebar, SidebarEvent, TabBarEvent, TabItem, WorkspaceTabBar,
 };
 
 struct KestrelWorkspace {
@@ -37,7 +37,7 @@ impl KestrelWorkspace {
         let sidebar = cx.new(|cx| Sidebar::new(window, cx));
         let tab_bar = cx.new(|_cx| WorkspaceTabBar::new());
         let editor = cx.new(|cx| RequestEditor::new(window, cx));
-        let response = cx.new(|_cx| ResponsePanel::new());
+        let response = cx.new(|cx| ResponsePanel::new(window, cx));
         let env_modal = cx.new(|cx| EnvironmentModal::new(window, cx));
 
         // Subscriptions
@@ -172,6 +172,23 @@ impl KestrelWorkspace {
             em.set_environments(initial_envs, active_env_id, cx);
         });
 
+        let sub_response = cx.subscribe_in(
+            &response,
+            window,
+            |this, _, ev: &ResponseEvent, _window, cx| match ev {
+                ResponseEvent::Retry => {
+                    this.execute_current_request(cx);
+                }
+                ResponseEvent::Cancel => {
+                    // Handled inside panel state
+                }
+                ResponseEvent::SaveToFile => {
+                    this.save_response_body_to_disk(cx);
+                }
+                ResponseEvent::CopyBody => {}
+            },
+        );
+
         let mut workspace = Self {
             sidebar,
             tab_bar,
@@ -186,7 +203,7 @@ impl KestrelWorkspace {
             } else {
                 None
             },
-            _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env],
+            _subscriptions: vec![sub_sidebar, sub_tabs, sub_editor, sub_env, sub_response],
         };
 
         let first_req = workspace.sidebar.read(cx).collection().and_then(|col| {
@@ -355,13 +372,21 @@ impl KestrelWorkspace {
                 Err(err) => {
                     cx.update(|cx| {
                         response_entity.update(cx, |res, cx| {
-                            res.set_error(err.to_string(), cx);
+                            res.set_error(err.into(), cx);
                         });
                     });
                 }
             }
         })
         .detach();
+    }
+
+    fn save_response_body_to_disk(&mut self, cx: &mut Context<Self>) {
+        if let Some(resp) = self.response.read(cx).current_response() {
+            let file_name = format!("response_{}.bin", resp.status);
+            let target_path = PathBuf::from(&file_name);
+            let _ = std::fs::write(&target_path, &resp.body);
+        }
     }
 
     fn open_collection_prompt(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -577,37 +602,52 @@ impl Render for KestrelWorkspace {
                                     ),
                             ),
                     )
-                    // 2. Main Workspace Layout (Sidebar + Request Tabs + Split Editor/Response)
+                    // 2. Main Workspace Layout (Sidebar + Request Tabs + Side-by-side Editor & Response)
                     .child(
                         h_flex()
                             .flex_1()
+                            .min_h_0()
                             .size_full()
+                            .overflow_hidden()
                             // Left Column: Native Tree Sidebar
-                            .child(self.sidebar.clone())
-                            // Right Column: Tab Bar + Editor & Response Panels
+                            .child(
+                                div()
+                                    .w(px(260.))
+                                    .min_w(px(220.))
+                                    .h_full()
+                                    .flex_shrink_0()
+                                    .child(self.sidebar.clone()),
+                            )
+                            // Right Area: Tab Bar + Editor & Response Panels
                             .child(
                                 v_flex()
                                     .flex_1()
-                                    .size_full()
+                                    .min_w_0()
+                                    .h_full()
+                                    .overflow_hidden()
                                     .child(self.tab_bar.clone())
                                     .child(
-                                        v_flex()
+                                        h_flex()
                                             .flex_1()
+                                            .min_h_0()
                                             .size_full()
-                                            // Top Half: Request Editor
+                                            .overflow_hidden()
+                                            // Left Pane: Request Editor
                                             .child(
                                                 div()
                                                     .flex_1()
-                                                    .size_full()
+                                                    .min_w_0()
+                                                    .h_full()
+                                                    .overflow_hidden()
                                                     .child(self.editor.clone()),
                                             )
-                                            // Subtle horizontal separator
-                                            .child(div().h(px(1.)).w_full().bg(colors.border))
-                                            // Bottom Half: Response Panel
+                                            // Right Pane: Response Panel
                                             .child(
                                                 div()
-                                                    .h(px(320.))
-                                                    .w_full()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .h_full()
+                                                    .overflow_hidden()
                                                     .child(self.response.clone()),
                                             ),
                                     ),

@@ -17,6 +17,29 @@ pub enum HttpError {
     Io(#[from] std::io::Error),
 }
 
+impl From<HttpError> for crate::response::RequestError {
+    fn from(err: HttpError) -> Self {
+        match err {
+            HttpError::Network(ref req_err) => crate::response::RequestError::from_reqwest(req_err),
+            HttpError::InvalidUrl(ref parse_err) => crate::response::RequestError::with_details(
+                crate::response::RequestErrorKind::InvalidUrl,
+                "URL inválida",
+                parse_err.to_string(),
+            ),
+            HttpError::Build(ref msg) => crate::response::RequestError::with_details(
+                crate::response::RequestErrorKind::Other,
+                "Error de configuración",
+                msg.clone(),
+            ),
+            HttpError::Io(ref io_err) => crate::response::RequestError::with_details(
+                crate::response::RequestErrorKind::Io,
+                "Error de lectura de archivo",
+                io_err.to_string(),
+            ),
+        }
+    }
+}
+
 pub struct HttpClient {
     client: reqwest::Client,
 }
@@ -244,7 +267,7 @@ impl HttpClient {
             headers,
             body: body_bytes,
             content_type,
-            timing: crate::response::Timing { total: duration },
+            timing: crate::response::Timing::from_total(duration),
             size: crate::response::Sizes {
                 headers_bytes,
                 body_bytes: body_len,

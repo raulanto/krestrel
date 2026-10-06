@@ -2,6 +2,7 @@
 
 pub mod components;
 pub mod environment;
+pub mod response;
 pub mod sidebar;
 pub mod theme;
 pub mod views;
