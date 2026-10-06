@@ -5,42 +5,42 @@ info:
   version: 1.0.0
 bundled: true
 items:
-- info:
-    name: Users
-    type: folder
-  items:
   - info:
-      name: List Users
+      name: Users
+      type: folder
+    items:
+      - info:
+          name: List Users
+          type: http
+        http:
+          method: GET
+          url: "{{baseUrl}}/users"
+          headers:
+            - name: Accept
+              value: application/json
+          params:
+            - name: limit
+              value: "10"
+          auth:
+            type: bearer
+            token: "{{apiKey}}"
+  - info:
+      name: Create Post
       type: http
     http:
-      method: GET
-      url: '{{baseUrl}}/users'
+      method: POST
+      url: "{{baseUrl}}/posts"
       headers:
-      - name: Accept
-        value: application/json
-      params:
-      - name: limit
-        value: '10'
-      auth:
-        type: bearer
-        token: '{{apiKey}}'
-- info:
-    name: Create Post
-    type: http
-  http:
-    method: POST
-    url: '{{baseUrl}}/posts'
-    headers:
-    - name: Content-Type
-      value: application/json
-    body:
-      type: json
-      data: '{"title":"foo","body":"bar","userId":1}'
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: '{"title":"foo","body":"bar","userId":1}'
 config:
   environments:
-  - name: Development
-    variables:
-    - name: baseUrl
-      value: https://jsonplaceholder.typicode.com
-    - name: apiKey
-      secret: true
+    - name: Development
+      variables:
+        - name: baseUrl
+          value: https://jsonplaceholder.typicode.com
+        - name: apiKey
+          secret: true
